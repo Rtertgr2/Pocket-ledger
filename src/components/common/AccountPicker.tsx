@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { makeStyles } from '../../providers/ThemeProvider';
+import { radius, spacing } from '../../theme';
 import type { AccountBalance } from '../../types';
 import { formatBaht } from '../../utils/money';
-import { colors, radius, spacing } from '../../theme';
 
 interface AccountPickerProps {
   label: string;
@@ -13,6 +14,7 @@ interface AccountPickerProps {
 }
 
 export function AccountPicker({ label, accounts, selectedId, onSelect, disabledId }: AccountPickerProps) {
+  const styles = useStyles();
   return (
     <View style={styles.wrapper}>
       <Text style={styles.label}>{label}</Text>
@@ -41,22 +43,22 @@ export function AccountPicker({ label, accounts, selectedId, onSelect, disabledI
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((palette) => ({
   wrapper: { gap: spacing.sm },
-  label: { fontSize: 13, fontWeight: '600', color: colors.muted },
+  label: { fontSize: 13, fontWeight: '600', color: palette.muted },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm },
   chip: {
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
     borderRadius: radius.pill,
-    backgroundColor: colors.surface,
+    backgroundColor: palette.surface,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: palette.border,
     gap: 2,
   },
-  selected: { backgroundColor: colors.primary, borderColor: colors.primary },
+  selected: { backgroundColor: palette.primary, borderColor: palette.primary },
   disabled: { opacity: 0.35 },
-  name: { fontSize: 14, fontWeight: '700', color: colors.text },
-  balance: { fontSize: 11, color: colors.muted, fontVariant: ['tabular-nums'] },
-  selectedText: { color: colors.white },
-});
+  name: { fontSize: 14, fontWeight: '700', color: palette.text },
+  balance: { fontSize: 11, color: palette.muted, fontVariant: ['tabular-nums'] as const },
+  selectedText: { color: palette.onPrimary },
+}));

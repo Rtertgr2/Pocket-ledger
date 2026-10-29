@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, StyleSheet, Text } from 'react-native';
+import { Animated, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, radius, spacing } from '../../theme';
+import { makeStyles } from '../../providers/ThemeProvider';
+import { radius, spacing } from '../../theme';
 
 type ToastTone = 'success' | 'error';
 
@@ -19,6 +20,7 @@ const VISIBLE_MS = 2200;
  */
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const insets = useSafeAreaInsets();
+  const styles = useStyles();
   const [toast, setToast] = useState<{ message: string; tone: ToastTone } | null>(null);
   const [opacity] = useState(() => new Animated.Value(0));
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -58,7 +60,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
             toast.tone === 'error' ? styles.error : styles.success,
           ]}
         >
-          <Text style={styles.text}>{toast.message}</Text>
+          <Text style={[styles.text, toast.tone === 'error' ? styles.errorText : null]}>
+            {toast.message}
+          </Text>
         </Animated.View>
       ) : null}
     </ToastContext.Provider>
@@ -71,17 +75,19 @@ export function useToast(): ToastContextValue {
   return context;
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((palette) => ({
   toast: {
-    position: 'absolute',
+    position: 'absolute' as const,
     left: spacing.xl,
     right: spacing.xl,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
     borderRadius: radius.md,
-    alignItems: 'center',
+    alignItems: 'center' as const,
   },
-  success: { backgroundColor: colors.text },
-  error: { backgroundColor: colors.expense },
-  text: { color: colors.white, fontSize: 14, fontWeight: '600' },
-});
+  // Inverted against the page in both schemes: one pair of colours, always readable.
+  success: { backgroundColor: palette.overlayBg },
+  error: { backgroundColor: palette.expense },
+  errorText: { color: palette.onPrimary },
+  text: { color: palette.overlayText, fontSize: 14, fontWeight: '600' as const },
+}));

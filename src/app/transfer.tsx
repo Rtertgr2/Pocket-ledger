@@ -1,20 +1,21 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { StyleSheet, Text } from 'react-native';
+import { Text } from 'react-native';
 import { AccountPicker } from '../components/common/AccountPicker';
 import { AmountInput } from '../components/common/AmountInput';
 import { Button } from '../components/common/Button';
 import { FormScreen } from '../components/common/FormScreen';
 import { TextField } from '../components/common/TextField';
 import { useToast } from '../components/common/Toast';
+import { makeStyles } from '../providers/ThemeProvider';
 import { useAppStore } from '../store/useAppStore';
-import { colors } from '../theme';
 import { parseAmountToSatang } from '../utils/money';
 
 export default function TransferScreen() {
   const db = useSQLiteContext();
   const { showToast } = useToast();
+  const styles = useStyles();
 
   const accounts = useAppStore((s) => s.accounts).filter((account) => account.is_active === 1);
   const transferFunds = useAppStore((s) => s.transferFunds);
@@ -78,7 +79,7 @@ export default function TransferScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  notice: { fontSize: 14, color: colors.muted },
-  hint: { fontSize: 12, color: colors.muted },
-});
+const useStyles = makeStyles((palette) => ({
+  notice: { fontSize: 14, color: palette.muted },
+  hint: { fontSize: 12, color: palette.muted },
+}));

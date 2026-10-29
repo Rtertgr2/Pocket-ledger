@@ -1,18 +1,21 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, SectionList, StyleSheet, Text, View } from 'react-native';
+import { Pressable, RefreshControl, SectionList, Text, View } from 'react-native';
 import { Screen } from '../../components/common/Screen';
 import { useToast } from '../../components/common/Toast';
 import { TransactionItem } from '../../components/transactions/TransactionItem';
 import { useDeleteTransaction } from '../../hooks/useDeleteTransaction';
+import { makeStyles, useTheme } from '../../providers/ThemeProvider';
 import { useAppStore } from '../../store/useAppStore';
-import { colors, radius, spacing } from '../../theme';
+import { radius, spacing } from '../../theme';
 import { groupByDay } from '../../utils/formatters';
 
 export default function TransactionsScreen() {
   const db = useSQLiteContext();
   const { showToast } = useToast();
+  const { palette } = useTheme();
+  const styles = useStyles();
   const [refreshing, setRefreshing] = useState(false);
 
   const accounts = useAppStore((s) => s.accounts);
@@ -58,10 +61,16 @@ export default function TransactionsScreen() {
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.content}
         stickySectionHeadersEnabled={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-        renderSectionHeader={({ section }) => (
-          <Text style={styles.sectionHeader}>{section.title}</Text>
-        )}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={palette.primary}
+            colors={[palette.primary]}
+            progressBackgroundColor={palette.surface}
+          />
+        }
+        renderSectionHeader={({ section }) => <Text style={styles.sectionHeader}>{section.title}</Text>}
         renderItem={({ item }) => (
           <View style={styles.row}>
             <TransactionItem
@@ -92,38 +101,38 @@ export default function TransactionsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((palette) => ({
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: 2 },
-  title: { fontSize: 24, fontWeight: '800', color: colors.text },
-  subtitle: { fontSize: 12, color: colors.muted },
+  title: { fontSize: 24, fontWeight: '800' as const, color: palette.text },
+  subtitle: { fontSize: 12, color: palette.muted },
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl * 2 },
   sectionHeader: {
     fontSize: 12,
-    fontWeight: '700',
-    color: colors.muted,
+    fontWeight: '700' as const,
+    color: palette.muted,
     paddingTop: spacing.lg,
     paddingBottom: spacing.xs,
   },
   row: {
-    backgroundColor: colors.surface,
+    backgroundColor: palette.surface,
     paddingHorizontal: spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: colors.border,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.border,
   },
-  empty: { alignItems: 'center', paddingTop: spacing.xxl, gap: spacing.xs },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
+  empty: { alignItems: 'center' as const, paddingTop: spacing.xxl, gap: spacing.xs },
+  emptyTitle: { fontSize: 16, fontWeight: '700' as const, color: palette.text },
   fab: {
-    position: 'absolute',
+    position: 'absolute' as const,
     right: spacing.xl,
     bottom: spacing.xl,
     width: 56,
     height: 56,
     borderRadius: radius.pill,
-    backgroundColor: colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: palette.primary,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
     elevation: 4,
   },
   fabPressed: { opacity: 0.9 },
-  fabLabel: { color: colors.white, fontSize: 28, fontWeight: '600', marginTop: -2 },
-});
+  fabLabel: { color: palette.onPrimary, fontSize: 28, fontWeight: '600' as const, marginTop: -2 },
+}));

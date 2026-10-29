@@ -1,15 +1,16 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { AccountPicker } from '../components/common/AccountPicker';
 import { AmountInput } from '../components/common/AmountInput';
 import { Button } from '../components/common/Button';
 import { FormScreen } from '../components/common/FormScreen';
 import { TextField } from '../components/common/TextField';
 import { useToast } from '../components/common/Toast';
+import { makeStyles } from '../providers/ThemeProvider';
 import { useAppStore } from '../store/useAppStore';
-import { colors, radius, spacing } from '../theme';
+import { radius, spacing } from '../theme';
 import { parseAmountToSatang } from '../utils/money';
 
 type EntryType = 'EXPENSE' | 'INCOME';
@@ -17,6 +18,7 @@ type EntryType = 'EXPENSE' | 'INCOME';
 export default function AddTransactionScreen() {
   const db = useSQLiteContext();
   const { showToast } = useToast();
+  const styles = useStyles();
   const params = useLocalSearchParams<{ accountId?: string }>();
 
   const accounts = useAppStore((s) => s.accounts).filter((account) => account.is_active === 1);
@@ -91,17 +93,22 @@ export default function AddTransactionScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((palette) => ({
   toggle: {
-    flexDirection: 'row',
-    backgroundColor: colors.surfaceMuted,
+    flexDirection: 'row' as const,
+    backgroundColor: palette.surfaceMuted,
     borderRadius: radius.md,
     padding: 4,
     gap: 4,
   },
-  toggleItem: { flex: 1, paddingVertical: spacing.sm, borderRadius: radius.sm, alignItems: 'center' },
-  toggleSelected: { backgroundColor: colors.surface },
-  toggleLabel: { fontSize: 14, fontWeight: '600', color: colors.muted },
-  toggleLabelSelected: { color: colors.text },
-  error: { fontSize: 12, color: colors.expense },
-});
+  toggleItem: {
+    flex: 1,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.sm,
+    alignItems: 'center' as const,
+  },
+  toggleSelected: { backgroundColor: palette.surface },
+  toggleLabel: { fontSize: 14, fontWeight: '600' as const, color: palette.muted },
+  toggleLabelSelected: { color: palette.text },
+  error: { fontSize: 12, color: palette.expense },
+}));

@@ -1,8 +1,10 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
+import { makeStyles } from '../../providers/ThemeProvider';
+import { radius, spacing } from '../../theme';
 import { formatBaht } from '../../utils/money';
-import { colors, radius, spacing } from '../../theme';
 
 export function TotalBalanceCard({ totalSatang, accountCount }: { totalSatang: number; accountCount: number }) {
+  const styles = useStyles();
   return (
     <View style={styles.card}>
       <Text style={styles.label}>ยอดรวมทุกบัญชี</Text>
@@ -14,14 +16,19 @@ export function TotalBalanceCard({ totalSatang, accountCount }: { totalSatang: n
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((palette) => ({
   card: {
-    backgroundColor: colors.primary,
+    backgroundColor: palette.primary,
     borderRadius: radius.lg,
     padding: spacing.xl,
     gap: spacing.xs,
   },
-  label: { color: 'rgba(255,255,255,0.8)', fontSize: 13, fontWeight: '600' },
-  amount: { color: colors.white, fontSize: 36, fontWeight: '800', fontVariant: ['tabular-nums'] },
-  caption: { color: 'rgba(255,255,255,0.75)', fontSize: 12 },
-});
+  label: { color: palette.onPrimaryMuted, fontSize: 13, fontWeight: '600' },
+  amount: {
+    color: palette.onPrimary,
+    fontSize: 36,
+    fontWeight: '800',
+    fontVariant: ['tabular-nums'] as const,
+  },
+  caption: { color: palette.onPrimaryMuted, fontSize: 12 },
+}));

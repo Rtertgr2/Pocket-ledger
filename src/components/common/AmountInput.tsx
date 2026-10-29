@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ComponentRef } from 'react';
 import { StyleSheet, TextInput, View } from 'react-native';
-import { colors, radius, spacing } from '../../theme';
+import { makeStyles, useTheme } from '../../providers/ThemeProvider';
+import { radius, spacing } from '../../theme';
 
 interface AmountInputProps {
   value: string;
@@ -11,6 +12,8 @@ interface AmountInputProps {
 
 /** The one place money is typed: a decimal pad that always starts focused. */
 export function AmountInput({ value, onChangeText, autoFocus = true, placeholder = '0.00' }: AmountInputProps) {
+  const styles = useStyles();
+  const { palette } = useTheme();
   const ref = useRef<ComponentRef<typeof TextInput>>(null);
 
   useEffect(() => {
@@ -28,8 +31,8 @@ export function AmountInput({ value, onChangeText, autoFocus = true, placeholder
         keyboardType="decimal-pad"
         inputMode="decimal"
         placeholder={placeholder}
-        placeholderTextColor={colors.muted}
-        selectionColor={colors.primary}
+        placeholderTextColor={palette.muted}
+        selectionColor={palette.primary}
         accessibilityLabel="จำนวนเงิน"
         style={styles.input}
       />
@@ -37,20 +40,20 @@ export function AmountInput({ value, onChangeText, autoFocus = true, placeholder
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((palette) => ({
   row: {
-    backgroundColor: colors.surface,
+    backgroundColor: palette.surface,
     borderRadius: radius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: palette.border,
     paddingHorizontal: spacing.md,
   },
   input: {
     fontSize: 36,
     fontWeight: '700',
-    color: colors.text,
+    color: palette.text,
     paddingVertical: spacing.lg,
     textAlign: 'center',
-    fontVariant: ['tabular-nums'],
+    fontVariant: ['tabular-nums'] as const,
   },
-});
+}));

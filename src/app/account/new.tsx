@@ -1,23 +1,26 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
 import { AmountInput } from '../../components/common/AmountInput';
 import { Button } from '../../components/common/Button';
 import { FormScreen } from '../../components/common/FormScreen';
 import { TextField } from '../../components/common/TextField';
 import { useToast } from '../../components/common/Toast';
+import { makeStyles } from '../../providers/ThemeProvider';
 import { useAppStore } from '../../store/useAppStore';
-import { colors, spacing } from '../../theme';
+import { ACCOUNT_COLORS, spacing } from '../../theme';
 import { parseAmountToSatang } from '../../utils/money';
 
 export default function NewAccountScreen() {
   const db = useSQLiteContext();
   const { showToast } = useToast();
+  const styles = useStyles();
   const createAccount = useAppStore((s) => s.createAccount);
 
   const [name, setName] = useState('');
   const [balanceText, setBalanceText] = useState('');
+  const [color, setColor] = useState<string>(ACCOUNT_COLORS[0]);
   const [saving, setSaving] = useState(false);
 
   // An empty balance field means "start at zero"; anything typed must parse.
@@ -31,6 +34,7 @@ export default function NewAccountScreen() {
       await createAccount(db, {
         name: name.trim(),
         initial_balance_satang: initialSatang,
+        color_hex: color,
       });
       showToast('เพิ่มบัญชีสำเร็จ');
       router.back();
@@ -54,6 +58,25 @@ export default function NewAccountScreen() {
         <Text style={styles.label}>ยอดเงินเริ่มต้น (ไม่บังคับ)</Text>
         <AmountInput value={balanceText} onChangeText={setBalanceText} autoFocus={false} />
       </View>
+      <View style={styles.colors}>
+        <Text style={styles.label}>สีการ์ด</Text>
+        <View style={styles.swatches}>
+          {ACCOUNT_COLORS.map((option) => (
+            <Pressable
+              key={option}
+              accessibilityRole="radio"
+              accessibilityLabel={`สี ${option}`}
+              accessibilityState={{ selected: option === color }}
+              onPress={() => setColor(option)}
+              style={[
+                styles.swatch,
+                { backgroundColor: option },
+                option === color ? styles.swatchSelected : null,
+              ]}
+            />
+          ))}
+        </View>
+      </View>
       <Text style={styles.hint}>
         ยอดเริ่มต้นคือเงินที่มีอยู่จริงในบัญชีตอนนี้ รายการถัดไปจะบวก–ลบจากยอดนี้
       </Text>
@@ -61,8 +84,12 @@ export default function NewAccountScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((palette) => ({
   balance: { gap: spacing.xs },
-  label: { fontSize: 13, fontWeight: '600', color: colors.muted },
-  hint: { fontSize: 12, color: colors.muted },
-});
+  label: { fontSize: 13, fontWeight: '600' as const, color: palette.muted },
+  colors: { gap: spacing.sm },
+  swatches: { flexDirection: 'row' as const, gap: spacing.sm },
+  swatch: { width: 34, height: 34, borderRadius: 17, borderWidth: 3, borderColor: 'transparent' },
+  swatchSelected: { borderColor: palette.text },
+  hint: { fontSize: 12, color: palette.muted },
+}));

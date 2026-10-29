@@ -1,5 +1,6 @@
-import { Pressable, StyleSheet, Text, type ViewStyle } from 'react-native';
-import { colors, radius, spacing } from '../../theme';
+import { Pressable, Text, type ViewStyle } from 'react-native';
+import { makeStyles } from '../../providers/ThemeProvider';
+import { radius, spacing } from '../../theme';
 
 interface ButtonProps {
   label: string;
@@ -10,6 +11,7 @@ interface ButtonProps {
 }
 
 export function Button({ label, onPress, variant = 'primary', disabled, style }: ButtonProps) {
+  const styles = useStyles();
   return (
     <Pressable
       accessibilityRole="button"
@@ -24,14 +26,12 @@ export function Button({ label, onPress, variant = 'primary', disabled, style }:
         style,
       ]}
     >
-      <Text style={[styles.label, variant === 'secondary' ? styles.secondaryLabel : null]}>
-        {label}
-      </Text>
+      <Text style={[styles.label, variant === 'secondary' ? styles.secondaryLabel : null]}>{label}</Text>
     </Pressable>
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((palette) => ({
   base: {
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
@@ -39,11 +39,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  primary: { backgroundColor: colors.primary },
-  secondary: { backgroundColor: colors.surfaceMuted },
-  danger: { backgroundColor: colors.expense },
+  primary: { backgroundColor: palette.primary },
+  secondary: { backgroundColor: palette.surfaceMuted },
+  danger: { backgroundColor: palette.expense },
   pressed: { opacity: 0.85 },
   disabled: { opacity: 0.45 },
-  label: { color: colors.white, fontSize: 15, fontWeight: '700' },
-  secondaryLabel: { color: colors.text },
-});
+  label: { color: palette.onPrimary, fontSize: 15, fontWeight: '700' },
+  secondaryLabel: { color: palette.text },
+}));

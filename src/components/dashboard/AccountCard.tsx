@@ -1,7 +1,8 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { makeStyles } from '../../providers/ThemeProvider';
+import { radius, spacing } from '../../theme';
 import type { AccountBalance } from '../../types';
 import { formatBaht } from '../../utils/money';
-import { colors, radius, spacing } from '../../theme';
 
 export function AccountCard({
   account,
@@ -12,6 +13,7 @@ export function AccountCard({
   onPress: () => void;
   onLongPress: () => void;
 }) {
+  const styles = useStyles();
   return (
     <Pressable
       accessibilityRole="button"
@@ -33,19 +35,24 @@ export function AccountCard({
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((palette) => ({
   card: {
     width: 170,
-    backgroundColor: colors.surface,
+    backgroundColor: palette.surface,
     borderRadius: radius.md,
     padding: spacing.lg,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: palette.border,
     gap: spacing.xs,
   },
   pressed: { opacity: 0.85 },
   dot: { width: 10, height: 10, borderRadius: 5 },
-  name: { fontSize: 14, fontWeight: '700', color: colors.text },
-  balance: { fontSize: 20, fontWeight: '800', color: colors.text, fontVariant: ['tabular-nums'] },
-  inactive: { fontSize: 11, color: colors.muted },
-});
+  name: { fontSize: 14, fontWeight: '700', color: palette.text },
+  balance: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: palette.text,
+    fontVariant: ['tabular-nums'] as const,
+  },
+  inactive: { fontSize: 11, color: palette.muted },
+}));

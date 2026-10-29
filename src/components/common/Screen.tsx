@@ -1,7 +1,8 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, View, type ViewStyle } from 'react-native';
+import { View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing } from '../../theme';
+import { makeStyles } from '../../providers/ThemeProvider';
+import { spacing } from '../../theme';
 
 /** Every screen sits on the same background and respects the top/bottom insets. */
 export function Screen({
@@ -14,6 +15,7 @@ export function Screen({
   padded?: boolean;
 }) {
   const insets = useSafeAreaInsets();
+  const styles = useStyles();
   return (
     <View
       style={[
@@ -28,7 +30,7 @@ export function Screen({
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+const useStyles = makeStyles((palette) => ({
+  root: { flex: 1, backgroundColor: palette.bg },
   padded: { paddingHorizontal: spacing.lg },
-});
+}));

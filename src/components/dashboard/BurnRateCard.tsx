@@ -1,8 +1,10 @@
 import { StyleSheet, Text, View } from 'react-native';
+import { makeStyles } from '../../providers/ThemeProvider';
+import { radius, spacing } from '../../theme';
 import { formatBaht } from '../../utils/money';
-import { colors, radius, spacing } from '../../theme';
 
 export function BurnRateCard({ burnRateSatang, monthExpenseSatang }: { burnRateSatang: number; monthExpenseSatang: number }) {
+  const styles = useStyles();
   return (
     <View style={styles.card}>
       <View style={styles.row}>
@@ -16,18 +18,23 @@ export function BurnRateCard({ burnRateSatang, monthExpenseSatang }: { burnRateS
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((palette) => ({
   card: {
-    backgroundColor: colors.surface,
+    backgroundColor: palette.surface,
     borderRadius: radius.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: colors.border,
+    borderColor: palette.border,
     gap: spacing.xs,
   },
-  row: { flexDirection: 'row', alignItems: 'baseline', justifyContent: 'space-between' },
-  label: { fontSize: 13, fontWeight: '600', color: colors.muted },
-  amount: { fontSize: 20, fontWeight: '800', color: colors.text, fontVariant: ['tabular-nums'] },
-  hint: { fontSize: 11, color: colors.muted },
-});
+  row: { flexDirection: 'row' as const, alignItems: 'baseline' as const, justifyContent: 'space-between' as const },
+  label: { fontSize: 13, fontWeight: '600' as const, color: palette.muted },
+  amount: {
+    fontSize: 20,
+    fontWeight: '800' as const,
+    color: palette.text,
+    fontVariant: ['tabular-nums'] as const,
+  },
+  hint: { fontSize: 11, color: palette.muted },
+}));

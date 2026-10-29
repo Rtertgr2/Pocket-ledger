@@ -1,18 +1,19 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState } from 'react';
-import { RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
-import { AccountCard } from '../../components/dashboard/AccountCard';
-import { BurnRateCard } from '../../components/dashboard/BurnRateCard';
-import { TotalBalanceCard } from '../../components/dashboard/TotalBalanceCard';
+import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
 import { Screen } from '../../components/common/Screen';
 import { useToast } from '../../components/common/Toast';
+import { AccountCard } from '../../components/dashboard/AccountCard';
+import { BurnRateCard } from '../../components/dashboard/BurnRateCard';
+import { TotalBalanceCard } from '../../components/dashboard/TotalBalanceCard';
 import { TransactionItem } from '../../components/transactions/TransactionItem';
 import { useDeleteTransaction } from '../../hooks/useDeleteTransaction';
+import { makeStyles, useTheme } from '../../providers/ThemeProvider';
 import { useAppStore } from '../../store/useAppStore';
-import { colors, spacing } from '../../theme';
+import { spacing } from '../../theme';
 import type { Transaction } from '../../types';
 
 const RECENT_LIMIT = 5;
@@ -20,6 +21,8 @@ const RECENT_LIMIT = 5;
 export default function DashboardScreen() {
   const db = useSQLiteContext();
   const { showToast } = useToast();
+  const { palette } = useTheme();
+  const styles = useStyles();
   const [refreshing, setRefreshing] = useState(false);
 
   const accounts = useAppStore((s) => s.accounts);
@@ -59,7 +62,15 @@ export default function DashboardScreen() {
     <Screen padded={false}>
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={palette.primary}
+            colors={[palette.primary]}
+            progressBackgroundColor={palette.surface}
+          />
+        }
       >
         <View style={styles.header}>
           <Text style={styles.greeting}>Pocket Ledger</Text>
@@ -133,26 +144,26 @@ export default function DashboardScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+const useStyles = makeStyles((palette) => ({
   content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md },
   header: { paddingTop: spacing.md, gap: 2 },
-  greeting: { fontSize: 24, fontWeight: '800', color: colors.text },
-  subtitle: { fontSize: 13, color: colors.muted },
+  greeting: { fontSize: 24, fontWeight: '800' as const, color: palette.text },
+  subtitle: { fontSize: 13, color: palette.muted },
   sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
+    flexDirection: 'row' as const,
+    alignItems: 'baseline' as const,
+    justifyContent: 'space-between' as const,
     marginTop: spacing.sm,
   },
-  sectionTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  sectionHint: { fontSize: 11, color: colors.muted },
-  link: { fontSize: 13, fontWeight: '600', color: colors.primary },
+  sectionTitle: { fontSize: 16, fontWeight: '700' as const, color: palette.text },
+  sectionHint: { fontSize: 11, color: palette.muted },
+  link: { fontSize: 13, fontWeight: '600' as const, color: palette.primary },
   cards: { gap: spacing.md, paddingRight: spacing.lg },
-  actions: { flexDirection: 'row', gap: spacing.md },
+  actions: { flexDirection: 'row' as const, gap: spacing.md },
   action: { flex: 1 },
   empty: { gap: spacing.sm },
-  emptyTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  emptyBody: { fontSize: 13, color: colors.muted },
+  emptyTitle: { fontSize: 16, fontWeight: '700' as const, color: palette.text },
+  emptyBody: { fontSize: 13, color: palette.muted },
   recent: { paddingVertical: spacing.xs },
-  divider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-});
+  divider: { borderTopWidth: 1, borderTopColor: palette.border },
+}));

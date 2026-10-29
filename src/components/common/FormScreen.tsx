@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { Keyboard, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { colors, spacing } from '../../theme';
+import { makeStyles } from '../../providers/ThemeProvider';
+import { spacing } from '../../theme';
 
 /**
  * Modal bodies: scrollable fields, with the action button always reachable above the keyboard.
@@ -11,6 +12,7 @@ import { colors, spacing } from '../../theme';
  */
 export function FormScreen({ children, footer }: { children: ReactNode; footer: ReactNode }) {
   const insets = useSafeAreaInsets();
+  const styles = useStyles();
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   useEffect(() => {
@@ -40,14 +42,14 @@ export function FormScreen({ children, footer }: { children: ReactNode; footer: 
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
+const useStyles = makeStyles((palette) => ({
+  root: { flex: 1, backgroundColor: palette.bg },
   content: { padding: spacing.lg, gap: spacing.lg },
   footer: {
     paddingHorizontal: spacing.lg,
     paddingTop: spacing.md,
-    backgroundColor: colors.bg,
+    backgroundColor: palette.bg,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: colors.border,
+    borderTopColor: palette.border,
   },
-});
+}));

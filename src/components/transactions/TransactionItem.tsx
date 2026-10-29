@@ -1,8 +1,9 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, Text, View } from 'react-native';
+import { makeStyles, useTheme } from '../../providers/ThemeProvider';
+import { spacing } from '../../theme';
 import type { Transaction } from '../../types';
-import { formatBaht } from '../../utils/money';
 import { formatTime, transactionTitle } from '../../utils/formatters';
-import { colors, spacing, typeColor } from '../../theme';
+import { formatBaht } from '../../utils/money';
 
 const TYPE_SIGN = { INCOME: '+', EXPENSE: '-', TRANSFER: '' } as const;
 
@@ -20,7 +21,10 @@ export function TransactionItem({
   destinationLabel,
   onLongPress,
 }: TransactionItemProps) {
-  const accent = typeColor[transaction.type];
+  const styles = useStyles();
+  const { palette } = useTheme();
+  const accent = { color: palette[ACCENT_KEY[transaction.type]] };
+  const accentBar = { backgroundColor: palette[ACCENT_KEY[transaction.type]] };
   const subtitle =
     transaction.type === 'TRANSFER'
       ? `${accountLabel} → ${destinationLabel ?? '?'}`
@@ -35,7 +39,7 @@ export function TransactionItem({
       accessibilityHint={onLongPress ? 'กดค้างเพื่อลบรายการ' : undefined}
       style={({ pressed }) => [styles.row, pressed ? styles.pressed : null]}
     >
-      <View style={[styles.icon, { backgroundColor: accent }]} />
+      <View style={[styles.icon, accentBar]} />
       <View style={styles.texts}>
         <Text style={styles.title} numberOfLines={1}>
           {transactionTitle(transaction)}
@@ -45,7 +49,7 @@ export function TransactionItem({
         </Text>
       </View>
       <View style={styles.amounts}>
-        <Text style={[styles.amount, { color: accent }]} numberOfLines={1}>
+        <Text style={[styles.amount, accent]} numberOfLines={1}>
           {TYPE_SIGN[transaction.type]}
           {formatBaht(transaction.amount_satang)}
         </Text>
@@ -57,19 +61,25 @@ export function TransactionItem({
   );
 }
 
-const styles = StyleSheet.create({
+const ACCENT_KEY = {
+  INCOME: 'income',
+  EXPENSE: 'expense',
+  TRANSFER: 'transfer',
+} as const;
+
+const useStyles = makeStyles((palette) => ({
   row: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
     gap: spacing.md,
     paddingVertical: spacing.md,
   },
   pressed: { opacity: 0.6 },
   icon: { width: 6, height: 32, borderRadius: 3 },
   texts: { flex: 1, gap: 2 },
-  title: { fontSize: 15, fontWeight: '600', color: colors.text },
-  subtitle: { fontSize: 12, color: colors.muted },
-  amounts: { alignItems: 'flex-end', gap: 2 },
-  amount: { fontSize: 15, fontWeight: '700', fontVariant: ['tabular-nums'] },
-  flag: { fontSize: 10, color: colors.muted },
-});
+  title: { fontSize: 15, fontWeight: '600' as const, color: palette.text },
+  subtitle: { fontSize: 12, color: palette.muted },
+  amounts: { alignItems: 'flex-end' as const, gap: 2 },
+  amount: { fontSize: 15, fontWeight: '700' as const, fontVariant: ['tabular-nums'] as const },
+  flag: { fontSize: 10, color: palette.muted },
+}));
