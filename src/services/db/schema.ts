@@ -39,7 +39,9 @@ export const DDL: string[] = [
      ON transactions(type, is_excluded_from_average, transaction_date)`,
 
   // A balance is never stored: it is the account's starting point plus every transaction touching it.
-  `CREATE VIEW IF NOT EXISTS v_account_balances AS
+  // Views hold no data, so recreating on every launch keeps a stale definition from surviving a schema edit.
+  `DROP VIEW IF EXISTS v_account_balances`,
+  `CREATE VIEW v_account_balances AS
    SELECT a.*,
           a.initial_balance_satang
           + COALESCE((SELECT SUM(CASE t.type WHEN 'INCOME' THEN t.amount_satang
