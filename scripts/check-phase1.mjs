@@ -104,7 +104,32 @@ try {
   assert.equal(formatSatang(-5), '-0.05');
   assert.equal(formatSatang(0), '0.00');
 
-  console.log('Phase 1 check passed: schema, constraints, balances, transfer exclusion, money parsing.');
+  // sumExpensesInRange's statement: excluded rows and transfers never enter the numerator.
+  query(`INSERT INTO transactions (id, account_id, type, amount_satang, transaction_date, is_excluded_from_average)
+         VALUES ('t3', 'kbank', 'EXPENSE', 999900, '2026-10-15T03:00:00Z', 1)`);
+  assert.equal(
+    query(`SELECT COALESCE(SUM(amount_satang),0) AS s FROM transactions
+           WHERE type='EXPENSE' AND is_excluded_from_average=0
+             AND transaction_date >= '2026-10-01T00:00:00.000Z' AND transaction_date < '2026-11-01T00:00:00.000Z'`)[0].s,
+    2000,
+    'excluded expense must not enter the burn-rate numerator'
+  );
+  assert.equal(
+    query(`SELECT COALESCE(SUM(amount_satang),0) AS s FROM transactions
+           WHERE type='EXPENSE' AND is_excluded_from_average=0
+             AND transaction_date >= '2026-11-01T00:00:00.000Z'`)[0].s,
+    0,
+    'a month with no eligible expenses sums to zero'
+  );
+
+  // Deleting one transfer row restores both sides, because balances are derived.
+  assert.equal(query("SELECT balance_satang AS b FROM v_account_balances WHERE id='cash'")[0].b, 38000);
+  assert.equal(query("SELECT balance_satang AS b FROM v_account_balances WHERE id='kbank'")[0].b, -789900);
+  query("DELETE FROM transactions WHERE id = 't2'");
+  assert.equal(query("SELECT balance_satang AS b FROM v_account_balances WHERE id='cash'")[0].b, 48000);
+  assert.equal(query("SELECT balance_satang AS b FROM v_account_balances WHERE id='kbank'")[0].b, -799900);
+
+  console.log('Phase 1 check passed: schema, constraints, derived balances, transfer exclusion, money parsing.');
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }
