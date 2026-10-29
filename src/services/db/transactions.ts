@@ -38,12 +38,10 @@ export async function deleteTransactionById(db: SQLiteDatabase, id: string): Pro
   return result.changes;
 }
 
-export function listRecentTransactions(
-  db: SQLiteDatabase,
-  limit: number
-): Promise<Transaction[]> {
+/** Newest first. `created_at` breaks ties so two same-second rows keep a stable order. */
+export function listTransactions(db: SQLiteDatabase, limit = 200): Promise<Transaction[]> {
   return db.getAllAsync<Transaction>(
-    'SELECT * FROM transactions ORDER BY transaction_date DESC LIMIT ?',
+    'SELECT * FROM transactions ORDER BY transaction_date DESC, created_at DESC LIMIT ?',
     limit
   );
 }

@@ -4,7 +4,7 @@ import type { StateCreator } from 'zustand';
 import {
   deleteTransactionById,
   insertTransaction,
-  listRecentTransactions,
+  listTransactions,
   sumExpensesInRange,
 } from '../../services/db/transactions';
 import { getAccountBalance } from '../../services/db/accounts';
@@ -18,13 +18,17 @@ import type {
 import type { AppStore } from '../useAppStore';
 
 export interface TransactionSlice {
-  recent: Transaction[];
+  /** Newest first, capped at the ledger screen's page size. */
+  transactions: Transaction[];
   burnRateSatang: number;
+  monthExpenseSatang: number;
   addTransaction: (db: SQLiteDatabase, dto: CreateTransactionDTO) => Promise<void>;
   transferFunds: (db: SQLiteDatabase, dto: TransferFundsDTO) => Promise<void>;
   deleteTransaction: (db: SQLiteDatabase, id: string) => Promise<void>;
   reconcileBalance: (db: SQLiteDatabase, dto: ReconcileBalanceDTO) => Promise<void>;
-  fetchStats: (db: SQLiteDatabase, now?: Date) => Promise<void>;
+  fetchTransactions: (db: SQLiteDatabase) => Promise<void>;
+  fetchBurnRate: (db: SQLiteDatabase, now?: Date) => Promise<void>;
+  refreshAll: (db: SQLiteDatabase) => Promise<void>;
 }
 
 export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionSlice> = (
@@ -33,13 +37,13 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
 ) => {
   /** Every write is followed by a re-read: SQLite stays the only truth. */
   async function refresh(db: SQLiteDatabase): Promise<void> {
-    await get().fetchAccounts(db);
-    await get().fetchStats(db);
+    await get().refreshAll(db);
   }
 
   return {
-    recent: [],
+    transactions: [],
     burnRateSatang: 0,
+    monthExpenseSatang: 0,
 
     addTransaction: async (db, dto) => {
       await insertTransaction(db, {
@@ -92,19 +96,26 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
       await refresh(db);
     },
 
-    fetchStats: async (db, now = new Date()) => {
+    fetchTransactions: async (db) => {
+      set({ transactions: await listTransactions(db) });
+    },
+
+    fetchBurnRate: async (db, now = new Date()) => {
       const { startIso, endIso } = monthRange(now.getFullYear(), now.getMonth());
-      const [expenseSum, recent] = await Promise.all([
-        sumExpensesInRange(db, startIso, endIso),
-        listRecentTransactions(db, 5),
-      ]);
+      const monthExpenseSatang = await sumExpensesInRange(db, startIso, endIso);
       set({
+        monthExpenseSatang,
         burnRateSatang: calculateDailyBurnRate(
-          expenseSum,
+          monthExpenseSatang,
           daysInMonth(now.getFullYear(), now.getMonth())
         ),
-        recent,
       });
+    },
+
+    refreshAll: async (db) => {
+      await get().fetchAccounts(db);
+      await get().fetchTransactions(db);
+      await get().fetchBurnRate(db);
     },
   };
 };

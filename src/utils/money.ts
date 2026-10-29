@@ -20,7 +20,20 @@ export function parseAmountToSatang(input: string): number | null {
   return satang > MAX_SATANG ? null : satang;
 }
 
-/** "1234.50" — display only, no thousands separators yet. */
+/** "1,234.50" — the display form: grouped thousands, always two decimals. */
+export function formatSatangGrouped(satang: number): string {
+  const [whole, fraction] = formatSatang(satang).split('.');
+  const sign = whole.startsWith('-') ? '-' : '';
+  const digits = sign ? whole.slice(1) : whole;
+  return `${sign}${digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',')}.${fraction}`;
+}
+
+/** "฿1,234.50" — money as the user reads it. */
+export function formatBaht(satang: number): string {
+  return `฿${formatSatangGrouped(satang)}`;
+}
+
+/** "1234.50" — display only, no thousands separators. */
 export function formatSatang(satang: number): string {
   const abs = Math.abs(Math.trunc(satang));
   const sign = satang < 0 ? '-' : '';

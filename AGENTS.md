@@ -25,6 +25,11 @@ Run lint and typecheck before declaring any task done.
 
 **Gotcha on this machine:** builds with a Thai locale fail (`Invalid Timestamp … for zip entry … expo-modules-v2-react-*-cpp.zip`), because Gradle decodes zip timestamps with the JVM default locale. Run Android builds as `LANG=C npx expo run:android`.
 
+Non-interactive shells also need the SDK path, e.g.
+`ANDROID_HOME=$HOME/Android/Sdk LANG=C npx expo run:android --device emulator-5554`,
+otherwise Gradle fails with `SDK location not found`. Run `npx expo prebuild --clean -p android`
+after adding a native module or a config plugin (the `android/` folder is generated and gitignored).
+
 ## Navigation & Routing
 
 - Use **Expo Router** for all navigation. Routes live in `src/app/` — every file there is a screen, `_layout.tsx` files define navigators. Keep non-route code (components, hooks, utils) outside `src/app/`.

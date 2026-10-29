@@ -1,7 +1,7 @@
 # Phase 2 — Money Movement & Stats Logic (Design)
 
 Date: 2026-10-29
-Status: awaiting approval
+Status: implemented; logic proven by `npm run check` / `npm test` and on device via the Phase 3 screens
 Scope: business logic + state only. No UI beyond keeping the Phase 1 dev screen compiling.
 
 ## Intent
