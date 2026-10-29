@@ -16,15 +16,12 @@ const dir = mkdtempSync(join(tmpdir(), 'phase1-'));
 const dbFile = join(dir, 'check.db');
 const PRAGMAS = 'PRAGMA foreign_keys = ON;\n';
 const SEED = `
-INSERT INTO accounts (id, name, initial_balance_satang, current_balance_satang)
-VALUES ('cash', 'เงินสด', 50000, 50000), ('kbank', 'KBank', 200000, 200000);
+INSERT INTO accounts (id, name, initial_balance_satang)
+VALUES ('cash', 'เงินสด', 50000), ('kbank', 'KBank', 200000);
 INSERT INTO transactions (id, account_id, type, amount_satang, transaction_date)
 VALUES ('t1', 'cash', 'EXPENSE', 2000, '2026-10-29T10:00:00Z');
-UPDATE accounts SET current_balance_satang = current_balance_satang - 2000 WHERE id = 'cash';
 INSERT INTO transactions (id, account_id, destination_account_id, type, amount_satang, transaction_date)
 VALUES ('t2', 'cash', 'kbank', 'TRANSFER', 10000, '2026-10-29T11:00:00Z');
-UPDATE accounts SET current_balance_satang = current_balance_satang - 10000 WHERE id = 'cash';
-UPDATE accounts SET current_balance_satang = current_balance_satang + 10000 WHERE id = 'kbank';
 `;
 
 /** Runs SQL, returns parsed rows (requires the statement to produce output). */
@@ -50,15 +47,22 @@ try {
     input: PRAGMAS + DDL.map((s) => `${s};`).join('\n') + SEED,
   });
 
-  // Balances follow the inserts above, in integer satang.
+  // Balances are derived from transactions, in integer satang.
   assert.deepEqual(
-    query("SELECT id, current_balance_satang AS b FROM accounts ORDER BY id").map((r) => [r.id, r.b]),
+    query("SELECT id, balance_satang AS b FROM v_account_balances ORDER BY id").map((r) => [r.id, r.b]),
     [
       ['cash', 38000],
       ['kbank', 210000],
     ],
-    'account balances'
+    'derived balances'
   );
+
+  // Deleting a transaction restores the balance — there is no rollback code to get wrong.
+  query(`INSERT INTO transactions (id, account_id, type, amount_satang, transaction_date)
+         VALUES ('t4', 'cash', 'EXPENSE', 500, '2026-10-29T12:00:00Z')`);
+  assert.equal(query("SELECT balance_satang FROM v_account_balances WHERE id = 'cash'")[0].balance_satang, 37500);
+  query("DELETE FROM transactions WHERE id = 't4'");
+  assert.equal(query("SELECT balance_satang FROM v_account_balances WHERE id = 'cash'")[0].balance_satang, 38000);
 
   // Burn-rate numerator: EXPENSE only, excludes TRANSFER and excluded rows.
   assert.equal(

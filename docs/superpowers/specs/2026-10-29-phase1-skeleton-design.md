@@ -74,6 +74,9 @@ foreign_keys = ON`, with the two documented risks fixed: deleting an account is 
 delete only (`is_active = 0`), and `destination_account_id` is **not** `ON DELETE SET NULL`
 (it keeps `ON DELETE RESTRICT`) so a deleted account can never orphan a transfer.
 
+> **Changed in Phase 2:** `accounts.current_balance_satang` was removed; balances are derived by
+> `v_account_balances`. See `2026-10-29-phase2-logic-design.md`.
+
 ## Verification
 
 1. `npx tsc --noEmit` clean.

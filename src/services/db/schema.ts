@@ -9,7 +9,6 @@ export const DDL: string[] = [
     id TEXT PRIMARY KEY NOT NULL,
     name TEXT NOT NULL,
     initial_balance_satang INTEGER NOT NULL DEFAULT 0,
-    current_balance_satang INTEGER NOT NULL DEFAULT 0,
     color_hex TEXT NOT NULL DEFAULT '#2E7D32',
     icon_name TEXT NOT NULL DEFAULT 'wallet',
     is_active INTEGER NOT NULL DEFAULT 1 CHECK (is_active IN (0, 1)),
@@ -38,10 +37,27 @@ export const DDL: string[] = [
   `CREATE INDEX IF NOT EXISTS idx_transactions_account ON transactions(account_id)`,
   `CREATE INDEX IF NOT EXISTS idx_transactions_calc
      ON transactions(type, is_excluded_from_average, transaction_date)`,
+
+  // A balance is never stored: it is the account's starting point plus every transaction touching it.
+  `CREATE VIEW IF NOT EXISTS v_account_balances AS
+   SELECT a.*,
+          a.initial_balance_satang
+          + COALESCE((SELECT SUM(CASE t.type WHEN 'INCOME' THEN t.amount_satang
+                                              ELSE -t.amount_satang END)
+                      FROM transactions t
+                      WHERE t.account_id = a.id AND t.type IN ('INCOME', 'EXPENSE')), 0)
+          + COALESCE((SELECT SUM(CASE WHEN t.account_id = a.id THEN -t.amount_satang
+                                      ELSE t.amount_satang END)
+                      FROM transactions t
+                      WHERE t.type = 'TRANSFER'
+                        AND (t.account_id = a.id OR t.destination_account_id = a.id)), 0)
+          AS balance_satang
+   FROM accounts a`,
 ];
 
 export async function initDatabase(db: SQLiteDatabase): Promise<void> {
   await db.execAsync('PRAGMA journal_mode = WAL');
   await db.execAsync('PRAGMA foreign_keys = ON');
   await db.execAsync(DDL.map((statement) => `${statement};`).join('\n'));
+  await db.execAsync('PRAGMA user_version = 1');
 }

@@ -5,12 +5,16 @@ export interface Account {
   id: string;
   name: string;
   initial_balance_satang: number;
-  current_balance_satang: number;
   color_hex: string;
   icon_name: string;
   is_active: number;
   created_at: string;
   updated_at: string;
+}
+
+/** An account plus its derived balance, i.e. a row of `v_account_balances`. */
+export interface AccountBalance extends Account {
+  balance_satang: number;
 }
 
 /** Row shape of `transactions`. `destination_account_id` is set only for TRANSFER. */

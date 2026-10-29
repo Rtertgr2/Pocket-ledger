@@ -9,29 +9,23 @@ async function summarize(db: SQLiteDatabase): Promise<string> {
   const accounts = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM accounts');
   const txs = await db.getFirstAsync<{ n: number }>('SELECT COUNT(*) AS n FROM transactions');
   const total = await db.getFirstAsync<{ satang: number }>(
-    'SELECT COALESCE(SUM(current_balance_satang), 0) AS satang FROM accounts WHERE is_active = 1'
+    'SELECT COALESCE(SUM(balance_satang), 0) AS satang FROM v_account_balances WHERE is_active = 1'
   );
   return `${accounts?.n ?? 0} accounts, ${txs?.n ?? 0} transactions, total ${formatSatang(total?.satang ?? 0)}`;
 }
 
-/** Inserts one 20.00 expense, mirroring the Phase 2 write pattern: balance update inside the same transaction. */
+/** Inserts one 20.00 expense. Balances are derived, so there is no account update to keep in sync. */
 async function addDemoExpense(db: SQLiteDatabase): Promise<void> {
   const id = String(Date.now());
-  await db.withExclusiveTransactionAsync(async (txn) => {
-    await txn.runAsync(
-      `INSERT OR IGNORE INTO accounts (id, name, initial_balance_satang, current_balance_satang)
-       VALUES ('cash', 'เงินสด', 50000, 50000)`
-    );
-    await txn.runAsync(
-      `INSERT INTO transactions (id, account_id, type, amount_satang, note, transaction_date)
-       VALUES (?, 'cash', 'EXPENSE', 2000, 'demo', ?)`,
-      id,
-      new Date().toISOString()
-    );
-    await txn.runAsync(
-      `UPDATE accounts SET current_balance_satang = current_balance_satang - 2000 WHERE id = 'cash'`
-    );
-  });
+  await db.runAsync(
+    `INSERT OR IGNORE INTO accounts (id, name, initial_balance_satang) VALUES ('cash', 'เงินสด', 50000)`
+  );
+  await db.runAsync(
+    `INSERT INTO transactions (id, account_id, type, amount_satang, note, transaction_date)
+     VALUES (?, 'cash', 'EXPENSE', 2000, 'demo', ?)`,
+    id,
+    new Date().toISOString()
+  );
 }
 
 /** Phase 1 proof of life: DB opens, schema applies, writes survive an app reload. */
