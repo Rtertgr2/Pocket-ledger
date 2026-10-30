@@ -9,7 +9,7 @@
 
 ---
 
-## 🇹🇭 ภาษาไทย
+## ภาษาไทย
 
 ### แนวคิด
 
@@ -123,7 +123,7 @@ workflow [`.github/workflows/build-apk.yml`](.github/workflows/build-apk.yml) �
 
 ---
 
-## 🇬🇧 English
+## English
 
 ### Idea
 
