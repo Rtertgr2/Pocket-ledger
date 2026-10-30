@@ -28,7 +28,7 @@
 - **สำรองข้อมูล 2 ทาง**
   - ไฟล์ JSON ผ่านแผงแชร์ของเครื่อง (นำเข้ากลับแบบ *เพิ่มอย่างเดียว* ไม่ทับข้อมูลเดิม)
   - push ขึ้น Google Sheets ผ่าน Apps Script ที่ผู้ใช้ deploy เอง — [`backup/apps-script/`](backup/apps-script/README.md)
-- **ตรวจอัปเดตในแอป** — อ่าน GitHub Releases ล่าสุด เทียบเวอร์ชัน แล้วเปิดเบราว์เซอร์ไปดาวน์โหลด APK
+- **ตรวจอัปเดตในแอป** — อ่าน manifest เวอร์ชันล่าสุดจากช่องทางอัปเดตของแอปเอง เทียบเวอร์ชัน แล้วเปิดเบราว์เซอร์ไปดาวน์โหลด APK
 
 ### เทคโนโลยี
 
@@ -109,8 +109,17 @@ workflow [`.github/workflows/build-apk.yml`](.github/workflows/build-apk.yml) �
 - การเซ็นถูก inject โดย [`plugins/withReleaseSigning.js`](plugins/withReleaseSigning.js) (อ่านรหัสจาก env
   ไม่เก็บความลับในไฟล์) ถ้าไม่มี `KEYSTORE_FILE` การ build ในเครื่องจะ fallback ไป debug key
 - **สถานะปัจจุบัน:** GitHub ปิด Actions ให้บัญชีนี้ (`HTTP 422 Actions has been disabled for this user`)
-  และบัญชีถูกซ่อนจากผู้ไม่ได้ล็อกอิน (404) จึง publish release `v1.0.0` ด้วยการ build ในเครื่องแทน —
-  รายละเอียดใน [`docs/superpowers/specs/2026-10-30-phase6-delivery-pipeline-design.md`](docs/superpowers/specs/2026-10-30-phase6-delivery-pipeline-design.md)
+  และบัญชีถูกซ่อนจากผู้ไม่ได้ล็อกอิน (404) — workflow จึงยังรันไม่ได้ และ release บน GitHub มือถือก็เข้าไม่ถึง
+
+ทางที่ใช้ได้จริงตอนนี้คือ **ช่องทางอัปเดตของแอปเอง** (`update-feed/` — Worker + R2 บน Freebuff Sites):
+
+```bash
+# build arm64 ตัวเดียว (~31MB) แล้วอัปโหลด APK + manifest
+UPLOAD_TOKEN=$(cat .secrets/upload-token.txt) \
+  node scripts/publish-feed.mjs android/app/build/outputs/apk/release/app-release.apk 1.0.1 "notes"
+```
+
+สัญญาของ feed และวิธีหมุน token อยู่ใน [`update-feed/README.md`](update-feed/README.md) · เบอร์ชั่นปัจจุบันบน feed: **1.0.1**
 
 ### เอกสารเพิ่มเติม
 
@@ -142,7 +151,7 @@ optional push into a spreadsheet you deploy yourself.
 - **Two backup paths**
   - JSON file through the system share sheet; import is *additive only* (`INSERT OR IGNORE`), so a wrong file cannot wipe the ledger
   - Push to Google Sheets through an Apps Script endpoint you deploy — see [`backup/apps-script/`](backup/apps-script/README.md)
-- **In-app update check** — reads the latest GitHub Release, compares versions and opens the APK in the browser
+- **In-app update check** — reads the app's own update manifest, compares versions and opens the APK in the browser
 
 ### Stack
 
@@ -226,9 +235,21 @@ tag's version, prebuilds `android/`, signs with the keystore from repository sec
   the credentials from the environment instead of storing them; without `KEYSTORE_FILE` a local
   `assembleRelease` falls back to the debug key
 - **Current status:** GitHub has Actions disabled for this account (`HTTP 422 Actions has been
-  disabled for this user`) and hides it from anonymous requests (404), so `v1.0.0` was built and
-  published from the development machine. Full write-up in
-  [`docs/superpowers/specs/2026-10-30-phase6-delivery-pipeline-design.md`](docs/superpowers/specs/2026-10-30-phase6-delivery-pipeline-design.md)
+  disabled for this user`) and hides it from anonymous requests (404), so the workflow cannot run and
+  GitHub-hosted releases are unreachable from a phone
+
+The path that works today is the app's own **update feed** (`update-feed/` — a Worker plus an R2
+bucket on Freebuff Sites):
+
+```bash
+# build a single ABI (~31MB), then upload the APK and the manifest
+UPLOAD_TOKEN=$(cat .secrets/upload-token.txt) \
+  node scripts/publish-feed.mjs android/app/build/outputs/apk/release/app-release.apk 1.0.1 "notes"
+```
+
+The feed contract and token rotation live in [`update-feed/README.md`](update-feed/README.md); the
+version currently advertised is **1.0.1**. Design record:
+[`docs/superpowers/specs/2026-10-30-phase6-delivery-pipeline-design.md`](docs/superpowers/specs/2026-10-30-phase6-delivery-pipeline-design.md)
 
 ### More documentation
 

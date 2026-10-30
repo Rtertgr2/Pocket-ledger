@@ -15,7 +15,7 @@ import { makeStyles, useTheme } from '../../providers/ThemeProvider';
 import { SCHEMA_VERSION } from '../../services/db/schema';
 import { countTransactions } from '../../services/db/transactions';
 import { readBackupEndpoint, readBackupSecret, writeBackupConfig, type ThemeMode } from '../../services/storage/settings';
-import { checkForUpdate as fetchLatestRelease } from '../../services/updates/releases';
+import { checkForUpdate as fetchLatestRelease } from '../../services/updates/feed';
 import { useAppStore } from '../../store/useAppStore';
 import { cardShadow, radius, spacing, readableTextOn } from '../../theme';
 import { formatBaht } from '../../utils/money';
@@ -80,7 +80,7 @@ export default function SettingsScreen() {
   const [secret, setSecret] = useState(() => readBackupSecret());
   const [transactionCount, setTransactionCount] = useState(0);
   const [checking, setChecking] = useState(false);
-  const [updateNote, setUpdateNote] = useState('ตรวจสอบเวอร์ชันล่าสุดจาก GitHub Releases ของโปรเจกต์');
+  const [updateNote, setUpdateNote] = useState('ตรวจสอบเวอร์ชันล่าสุดจากช่องทางอัปเดตของแอป');
 
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -134,7 +134,7 @@ export default function SettingsScreen() {
   async function checkForUpdate() {
     if (checking) return;
     setChecking(true);
-    setUpdateNote('กำลังตรวจสอบเวอร์ชันล่าสุดบน GitHub…');
+    setUpdateNote('กำลังตรวจสอบเวอร์ชันล่าสุด…');
 
     try {
       const result = await fetchLatestRelease({ currentVersion: appVersion });
@@ -155,7 +155,7 @@ export default function SettingsScreen() {
           {
             text: 'ดาวน์โหลด APK',
             onPress: () => {
-              Linking.openURL(latest.apkUrl ?? latest.pageUrl).catch(() => {
+              Linking.openURL(latest.apkUrl).catch(() => {
                 showToast('เปิดเบราว์เซอร์ไม่ได้', 'error');
               });
             },

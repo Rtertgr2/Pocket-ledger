@@ -3,7 +3,7 @@
     "name": "pocket-ledger",
     "slug": "pocket-ledger",
     "scheme": "pocketledger",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -18,7 +18,8 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.pocketledger"
+      "package": "com.anonymous.pocketledger",
+      "versionCode": 2
     },
     "web": {
       "favicon": "./assets/favicon.png"

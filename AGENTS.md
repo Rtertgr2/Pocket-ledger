@@ -63,3 +63,19 @@ Signing is injected by `plugins/withReleaseSigning.js` — never hand-edit signi
 from anonymous requests, so workflow runs and public APK downloads fail with 404. The signing
 keystore is backed up in `~/.pocket-ledger/` and in the project memory folder; losing it means an
 installed app can no longer be updated in place.
+
+### Publishing to the update feed (works today)
+
+Until Actions returns, releases go through the app's own feed (`update-feed/`, a Worker + R2 bucket
+on Freebuff Sites). The in-app check reads that manifest, not GitHub.
+
+```bash
+cd android && ./gradlew --no-daemon assembleRelease -PreactNativeArchitectures=arm64-v8a
+# then, from the repo root:
+UPLOAD_TOKEN=$(cat .secrets/upload-token.txt) \
+  node scripts/publish-feed.mjs android/app/build/outputs/apk/release/app-release.apk 1.0.1 "notes"
+```
+
+Rules: build **one ABI** (arm64 → ~31MB; the feed rejects over 60MB), upload the APK before the
+manifest (the script does this), and bump `app.json` `version` + `versionCode` first so Android
+accepts the install. `update-feed/README.md` has the route contract and token rotation.

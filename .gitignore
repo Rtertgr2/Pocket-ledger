@@ -44,3 +44,6 @@ yarn-error.*
 
 # Freebuff workspace state
 .freebuff/
+
+# local secrets used for the update feed
+.secrets/

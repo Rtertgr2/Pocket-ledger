@@ -1,8 +1,9 @@
 # Phase 6 — Delivery Pipeline (Design)
 
 Date: 2026-10-30
-Status: code complete and partially verified — the GitHub Actions run is blocked by an
-account-level restriction on `Rtertgr2`, not by this change.
+Status: code complete; the GitHub Actions run is blocked by an account-level restriction on
+`Rtertgr2`, so releases are built locally and published to the app's own update feed (see
+"Update feed" at the end of this document).
 Scope: Phase 6 of the roadmap — repository, keystore, CI-built signed APK, in-app update check.
 No store publishing, no OTA updates, no AAB/app-bundle path.
 
@@ -205,6 +206,89 @@ Consequences until GitHub lifts it:
 
 Nothing in the code should be changed to work around this: a private token inside the app would leak
 it, and pointing the checker at a mirror would hide the real state.
+
+## Update feed — the channel that actually works (2026-10-30, same day)
+
+On the phone, the GitHub check showed "ยังไม่มีการเผยแพร่เวอร์ชันบน GitHub" even though `v1.0.0` was
+published. Re-checked from outside the account:
+
+```
+GET /repos/Rtertgr2/Pocket-ledger/releases/latest  (anonymous) → 404
+GET /repos/Rtertgr2/Pocket-ledger                   (anonymous) → 404
+GET …/releases/latest                              (with token) → 200, v1.0.0, 2 assets
+```
+
+So the app was right and GitHub simply hides the account. No client-side change could fix that:
+an app that shipped a token would leak it, and any GitHub URL under a hidden account 404s for every
+phone. The channel was replaced instead of patched.
+
+### Design
+
+A Worker + R2 bucket on Freebuff Sites, in `update-feed/`:
+
+| Route | Behaviour |
+|---|---|
+| `GET /latest.json` | the manifest the app reads, `cache-control: no-store` |
+| `GET /<file>` | streams the object from R2 with its stored content type |
+| `PUT /admin/<file>` | the only write path; requires `Authorization: Bearer $UPLOAD_TOKEN` |
+
+Manifest shape (validated by `parseFeed` in one place):
+
+```json
+{
+  "format": "pocket-ledger.update",
+  "version": "1.0.1",
+  "notes": "…",
+  "apkUrl": "https://<site>/pocket-ledger-1.0.1.apk",
+  "publishedAt": "2026-10-30T10:29:47.729Z"
+}
+```
+
+Decisions worth keeping:
+
+- **The APK lives in the same place as the manifest.** Two hosts would mean two things to keep in
+  sync and two ways for a release to half-publish.
+- **Uploads are a separate, token-guarded route.** Downloads stay anonymous and cacheable; only the
+  person holding `.secrets/upload-token.txt` can replace a file. The token is a Worker secret, and
+  the file is gitignored.
+- **Order matters in the publisher.** `scripts/publish-feed.mjs` uploads the APK first and
+  `latest.json` last, so the feed never advertises a version whose file is not there yet.
+- **Cache-busting on the client.** The manifest is served `no-store` and the app appends `?t=<ms>`,
+  because a cached manifest is a missed update.
+- **60MB upload cap.** The Worker rejects larger bodies, which matches the arm64-only APK (31MB) and
+  keeps a stray universal 95MB APK from being published.
+- **`format` is checked** when present, so a JSON file from somewhere else is rejected rather than
+  read as a version.
+
+### Verification (live, preview and production)
+
+| Check | Result |
+|---|---|
+| `PUT /admin/test.txt` without a token | `403` |
+| `GET /latest.json` | `200`, manifest v1.0.1, `no-store` |
+| `HEAD /pocket-ledger-1.0.1.apk` | `200`, `application/vnd.android.package-archive`, 31 950 912 bytes |
+| Download and hash | sha256 `149439f0…9af03`, byte-identical to the built file |
+| `checkForUpdate` against the live feed | `1.0.0 → available`, `1.0.1 → up to date`, `1.1.0 → up to date` |
+| APK metadata | `versionCode 2`, `versionName 1.0.1`, signed `CN=Pocket Ledger` |
+
+One transient `502 Site unavailable` was seen within ~1 minute of the production deploy and was gone
+on retry; the same URL has served the full file on every request since.
+
+### What changed in the app
+
+- `src/services/updates/releases.ts` (GitHub) was replaced by `src/services/updates/feed.ts`, which
+  keeps the version ordering and the Thai error phrasing but reads the manifest. Tests moved with it.
+- `app.json` is now `1.0.1` / `versionCode 2`, so the feed's release installs over an existing 1.0.0.
+- `update-feed/README.md` documents publishing and token rotation.
+
+### Consequences
+
+- The first install of a build with the new checker still has to be manual: a phone on 1.0.0 runs the
+  old GitHub check and cannot discover 1.0.1. From 1.0.1 onward the button works.
+- The feed is now a second thing to keep alive. If the site is deleted or unpublished, the button
+  fails with a network-style message and nothing else in the app is affected.
+- `build-apk.yml` still uploads to GitHub Releases when Actions is restored; the feed step is not in
+  that workflow, so a restored CI would still need `publish-feed.mjs` run once per release.
 
 ## Out of scope
 
