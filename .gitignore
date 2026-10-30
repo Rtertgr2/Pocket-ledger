@@ -40,7 +40,8 @@ yarn-error.*
 /ios
 /android
 
-.superpowers/
+.superpowers/ 
+docs/
 
 # Freebuff workspace state
 .freebuff/
