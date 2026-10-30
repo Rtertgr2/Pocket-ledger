@@ -46,3 +46,20 @@ Docs: https://docs.expo.dev/eas/index.md
 - If `ios/` and `android/` directories do not exist, they are generated (Continuous Native Generation). Never create or edit them by hand — configure native behavior in `app.json` and config plugins.
 - Expo Go only includes its bundled native modules. After adding a library with native code, the app needs a development build: `npx expo run:ios|android` locally, or `eas build --profile development`.
 - Prefer recommended Expo modules over third-party libraries, and check your available skills before adding dependencies. Docs: https://docs.expo.dev/versions/latest/index.md
+
+## Releasing an APK
+
+`git tag v1.2.3 && git push origin v1.2.3` is the release. `.github/workflows/build-apk.yml` runs
+the checks, stamps the tag's version into `app.json` (`scripts/stamp-version.mjs`), prebuilds
+`android/`, signs with the keystore from repository secrets and attaches
+`pocket-ledger-<version>.apk` to a GitHub Release with `--latest` (the in-app update check reads
+`/releases/latest`, so a non-latest release never reaches a phone).
+
+Signing is injected by `plugins/withReleaseSigning.js` — never hand-edit signing into
+`android/app/build.gradle`, prebuild deletes it. Without `KEYSTORE_FILE` in the environment a local
+`assembleRelease` falls back to the debug key.
+
+**Known blocker (2026-10-30):** GitHub has Actions disabled for this account and hides the account
+from anonymous requests, so workflow runs and public APK downloads fail with 404. The signing
+keystore is backed up in `~/.pocket-ledger/` and in the project memory folder; losing it means an
+installed app can no longer be updated in place.

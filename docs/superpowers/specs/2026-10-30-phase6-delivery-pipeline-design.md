@@ -155,6 +155,23 @@ So the signing path works end to end; only the CI run is outstanding.
 `checkForUpdate({ currentVersion: '1.0.0' })` against the live endpoint returned the 404 message
 `ยังไม่มีการเผยแพร่เวอร์ชันบน GitHub`, i.e. the error path is real, not only mocked.
 
+### v1.0.0 published from this machine
+
+Because CI cannot run, the release was built and published locally instead of waiting:
+`assembleRelease` → `dist/pocket-ledger-1.0.0.apk` (SHA-256
+`01bd1f70c54a32a77c07837085035d050a2776144521d15951c3372758847a12`) plus `SHA256SUMS.txt`,
+uploaded with `gh release create v1.0.0 … --latest`. The authenticated API confirms what the app
+will see once the account is restored:
+
+```
+GET /repos/Rtertgr2/Pocket-ledger/releases/latest  (with token)
+→ { tag: 'v1.0.0', draft: false, prerelease: false,
+    assets: ['pocket-ledger-1.0.0.apk', 'SHA256SUMS.txt'] }
+```
+
+Git tag `v1.0.0` exists on `origin` at `8054b47`. The workflow is still tag-triggered, so the first
+tag pushed after Actions is re-enabled will produce the same artifact in CI.
+
 ## Blocked: GitHub Actions is disabled for this account
 
 `gh workflow run build-apk.yml` fails with:
@@ -180,8 +197,11 @@ Consequences until GitHub lifts it:
 
 1. No workflow run, so no CI-built APK. The workflow is committed and ready.
 2. Anonymous API 404 means the in-app check on a phone cannot see the repository either — it will
-   report "ยังไม่มีการเผยแพร่เวอร์ชันบน GitHub" no matter what is published.
-3. Release downloads would not be reachable publicly for the same reason.
+   report "ยังไม่มีการเผยแพร่เวอร์ชันบน GitHub" no matter what is published. Verified against the
+   published v1.0.0: the service returned that message for both `0.9.0` and `1.0.0`.
+3. Release downloads are not reachable publicly either:
+   `curl -L .../releases/download/v1.0.0/pocket-ledger-1.0.0.apk` → `404` (the same URL works for
+   the repository owner while signed in).
 
 Nothing in the code should be changed to work around this: a private token inside the app would leak
 it, and pointing the checker at a mirror would hide the real state.
