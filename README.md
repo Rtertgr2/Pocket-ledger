@@ -4,9 +4,6 @@
 
 [ไทย](#-ภาษาไทย) · [English](#-english)
 
-![หน้าภาพรวม (โหมดสว่าง)](screenshots/light-dashboard.png)
-![หน้าภาพรวม (โหมดมืด)](screenshots/dark-dashboard.png)
-
 ---
 
 ## ภาษาไทย
