@@ -28,7 +28,8 @@
       "expo-router",
       "expo-system-ui",
       "expo-quick-actions",
-      "expo-sharing"
+      "expo-sharing",
+      "./plugins/withReleaseSigning"
     ],
     "experiments": {
       "typedRoutes": true

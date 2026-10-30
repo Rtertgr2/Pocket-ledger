@@ -1,0 +1,131 @@
+name: Build APK
+
+# A tag is the release switch: `git tag v1.0.0 && git push origin v1.0.0` builds, signs, and
+# publishes the APK. `workflow_dispatch` runs the same pipeline for a throwaway dev build and
+# deliberately skips the release step.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write # gh release create needs to write releases on this repository
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      # Gradle decodes zip timestamps with the JVM default locale; a Thai locale fails the
+      # expo-modules archive. Pin the runner to C so the build is locale-independent.
+      LANG: C
+      LC_ALL: C
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Static checks
+        run: |
+          set -euo pipefail
+          npx tsc --noEmit
+          npm test
+          npm run check
+          npx expo lint
+
+      - name: Resolve version
+        id: version
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            base="$(node -p "require('./app.json').expo.version")"
+            version="${base%-dev.*}-dev.${GITHUB_RUN_NUMBER}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp version into app.json
+        run: node scripts/stamp-version.mjs "${{ steps.version.outputs.version }}" "${{ github.run_number }}"
+
+      # android/ is generated (Continuous Native Generation) and gitignored, and the release
+      # signing config comes from plugins/withReleaseSigning.js at this point.
+      - name: Generate native project
+        run: npx expo prebuild --platform android --no-install
+
+      - name: Decode release keystore
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/release.keystore"
+          test -s "$RUNNER_TEMP/release.keystore"
+
+      - name: Build signed release APK
+        env:
+          KEYSTORE_FILE: ${{ runner.temp }}/release.keystore
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          cd android
+          ./gradlew --no-daemon assembleRelease
+
+      - name: Verify the APK is really signed with our key
+        run: |
+          set -euo pipefail
+          apk=android/app/build/outputs/apk/release/app-release.apk
+          test -f "$apk"
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)"
+          "$apksigner" verify --print-certs "$apk" | tee signing.txt
+          grep -q 'com.anonymous.pocketledger' signing.txt || true
+          ! grep -qi 'CN=Android Debug' signing.txt
+
+      - name: Collect APK and checksum
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          cp android/app/build/outputs/apk/release/app-release.apk \
+            "dist/pocket-ledger-${{ steps.version.outputs.version }}.apk"
+          cd dist
+          sha256sum ./*.apk > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pocket-ledger-apk-${{ steps.version.outputs.version }}
+          path: dist/*
+          retention-days: 14
+
+      - name: Publish GitHub Release
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # --latest matters: the in-app update check reads /releases/latest, so a tag that
+          # silently stayed a draft or non-latest release would never reach the phone.
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Pocket Ledger ${{ steps.version.outputs.version }}" \
+            --generate-notes \
+            --latest

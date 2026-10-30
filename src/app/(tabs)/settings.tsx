@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useState, type ComponentProps, type ReactNode } from 'react';
-import { Alert, ScrollView, Text, View } from 'react-native';
+import { Alert, Linking, ScrollView, Text, View } from 'react-native';
 import { useBackup } from '../../hooks/useBackup';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
@@ -15,6 +15,7 @@ import { makeStyles, useTheme } from '../../providers/ThemeProvider';
 import { SCHEMA_VERSION } from '../../services/db/schema';
 import { countTransactions } from '../../services/db/transactions';
 import { readBackupEndpoint, readBackupSecret, writeBackupConfig, type ThemeMode } from '../../services/storage/settings';
+import { checkForUpdate as fetchLatestRelease } from '../../services/updates/releases';
 import { useAppStore } from '../../store/useAppStore';
 import { cardShadow, radius, spacing, readableTextOn } from '../../theme';
 import { formatBaht } from '../../utils/money';
@@ -79,7 +80,7 @@ export default function SettingsScreen() {
   const [secret, setSecret] = useState(() => readBackupSecret());
   const [transactionCount, setTransactionCount] = useState(0);
   const [checking, setChecking] = useState(false);
-  const [updateNote, setUpdateNote] = useState('ตรวจสอบเวอร์ชันในเครื่องนี้ ยังไม่เชื่อมต่อเซิร์ฟเวอร์อัปเดต');
+  const [updateNote, setUpdateNote] = useState('ตรวจสอบเวอร์ชันล่าสุดจาก GitHub Releases ของโปรเจกต์');
 
   const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
@@ -126,16 +127,48 @@ export default function SettingsScreen() {
     );
   }
 
-  /** No update channel yet: this confirms which build is installed, nothing is downloaded. */
-  function checkForUpdate() {
+  /**
+   * Reads the latest GitHub Release and, when it is newer, offers the APK in the browser. Nothing
+   * is downloaded or installed by the app itself, so a failed check never touches the ledger.
+   */
+  async function checkForUpdate() {
     if (checking) return;
     setChecking(true);
-    setUpdateNote('กำลังตรวจสอบเวอร์ชันที่ติดตั้ง…');
-    setTimeout(() => {
+    setUpdateNote('กำลังตรวจสอบเวอร์ชันล่าสุดบน GitHub…');
+
+    try {
+      const result = await fetchLatestRelease({ currentVersion: appVersion });
+      const { latest } = result;
+
+      if (!result.available) {
+        setUpdateNote(`คุณใช้เวอร์ชันล่าสุดแล้ว (v${appVersion})`);
+        showToast(`เวอร์ชันล่าสุด v${latest.version}`);
+        return;
+      }
+
+      setUpdateNote(`มีเวอร์ชันใหม่ v${latest.version} · เครื่องนี้ใช้ v${appVersion}`);
+      Alert.alert(
+        `มีเวอร์ชันใหม่ v${latest.version}`,
+        latest.notes ? excerpt(latest.notes, 300) : 'ดาวน์โหลด APK แล้วติดตั้งทับได้เลย ข้อมูลในเครื่องยังอยู่ครบ',
+        [
+          { text: 'ไว้ก่อน', style: 'cancel' },
+          {
+            text: 'ดาวน์โหลด APK',
+            onPress: () => {
+              Linking.openURL(latest.apkUrl ?? latest.pageUrl).catch(() => {
+                showToast('เปิดเบราว์เซอร์ไม่ได้', 'error');
+              });
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'ตรวจสอบอัปเดตไม่สำเร็จ';
+      setUpdateNote(message);
+      showToast(message, 'error');
+    } finally {
       setChecking(false);
-      setUpdateNote(`คุณใช้เวอร์ชันล่าสุดที่ติดตั้งไว้ (v${appVersion}) — ยังไม่เชื่อมต่อเซิร์ฟเวอร์อัปเดต`);
-      showToast(`เวอร์ชัน v${appVersion}`);
-    }, 500);
+    }
   }
 
   return (
@@ -317,6 +350,12 @@ export default function SettingsScreen() {
       </ScrollView>
     </Screen>
   );
+}
+
+/** Alert bodies get unreadable past a couple of paragraphs, so the dialog shows the gist only. */
+function excerpt(text: string, limit: number): string {
+  const oneLine = text.replace(/\s+/g, ' ').trim();
+  return oneLine.length <= limit ? oneLine : `${oneLine.slice(0, limit - 1)}…`;
 }
 
 const useStyles = makeStyles((palette) => ({
