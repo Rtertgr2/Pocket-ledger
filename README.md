@@ -2,7 +2,7 @@
 
 แอปบันทึกรายรับ–รายจ่ายที่ทำงานออฟไลน์ 100% บน Android · An offline-first Android ledger for personal spending.
 
-[ไทย](#-ภาษาไทย) · [English](#-english)
+[ไทย](#ภาษาไทย) · [English](#english)
 
 ---
 
