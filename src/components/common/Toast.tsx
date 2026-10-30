@@ -82,12 +82,12 @@ const useStyles = makeStyles((palette) => ({
     right: spacing.xl,
     paddingVertical: spacing.md,
     paddingHorizontal: spacing.lg,
-    borderRadius: radius.md,
+    borderRadius: radius.pill,
     alignItems: 'center' as const,
   },
   // Inverted against the page in both schemes: one pair of colours, always readable.
   success: { backgroundColor: palette.overlayBg },
   error: { backgroundColor: palette.expense },
-  errorText: { color: palette.onPrimary },
+  errorText: { color: palette.onExpense },
   text: { color: palette.overlayText, fontSize: 14, fontWeight: '600' as const },
 }));

@@ -1,5 +1,8 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
+/** Bump when the DDL changes. Every bump needs an entry in `MIGRATIONS`. */
+export const SCHEMA_VERSION = 2;
+
 /**
  * Schema for the local ledger. Money columns are INTEGER satang (1 baht = 100), not REAL.
  * Accounts are soft-deleted (is_active = 0), so no account delete may cascade away history.
@@ -23,6 +26,7 @@ export const DDL: string[] = [
     type TEXT NOT NULL CHECK (type IN ('INCOME', 'EXPENSE', 'TRANSFER')),
     amount_satang INTEGER NOT NULL CHECK (amount_satang > 0),
     note TEXT,
+    category TEXT,
     is_excluded_from_average INTEGER NOT NULL DEFAULT 0 CHECK (is_excluded_from_average IN (0, 1)),
     transaction_date TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
@@ -57,9 +61,31 @@ export const DDL: string[] = [
    FROM accounts a`,
 ];
 
+/**
+ * Statements that upgrade an existing database to a newer version, keyed by target version.
+ * A fresh install runs `DDL` only, because `DDL` already describes the newest shape.
+ */
+export const MIGRATIONS: Record<number, string[]> = {
+  2: ['ALTER TABLE transactions ADD COLUMN category TEXT'],
+};
+
 export async function initDatabase(db: SQLiteDatabase): Promise<void> {
   await db.execAsync('PRAGMA journal_mode = WAL');
   await db.execAsync('PRAGMA foreign_keys = ON');
+
+  const row = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  const from = row?.user_version ?? 0;
+
   await db.execAsync(DDL.map((statement) => `${statement};`).join('\n'));
-  await db.execAsync('PRAGMA user_version = 1');
+
+  // user_version 0 means there was no database before this launch: the DDL is already current.
+  if (from > 0) {
+    for (let version = from + 1; version <= SCHEMA_VERSION; version += 1) {
+      for (const statement of MIGRATIONS[version] ?? []) {
+        await db.execAsync(`${statement};`);
+      }
+    }
+  }
+
+  await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);
 }

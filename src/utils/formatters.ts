@@ -37,6 +37,11 @@ export function formatDayLabel(date: Date, now: Date = new Date()): string {
   return `${date.getDate()} ${THAI_MONTHS[date.getMonth()]} ${date.getFullYear()}`;
 }
 
+/** "ต.ค. 2026" — the month a report is showing. */
+export function formatMonthLabel(date: Date): string {
+  return `${THAI_MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+}
+
 /** "14:05" in local time. */
 export function formatTime(isoDate: string): string {
   const date = new Date(isoDate);

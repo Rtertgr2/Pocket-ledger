@@ -33,7 +33,7 @@ export function TextField({
         onChangeText={onChangeText}
         placeholder={placeholder}
         placeholderTextColor={palette.muted}
-        selectionColor={palette.primary}
+        selectionColor={palette.primaryText}
         autoFocus={autoFocus}
         maxLength={maxLength}
         secureTextEntry={secureTextEntry}

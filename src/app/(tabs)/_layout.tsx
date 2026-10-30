@@ -13,7 +13,7 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: palette.primary,
+        tabBarActiveTintColor: palette.primaryText,
         tabBarInactiveTintColor: palette.muted,
         tabBarStyle: { backgroundColor: palette.surface, borderTopColor: palette.border },
         tabBarLabelStyle: { fontSize: 11, fontWeight: '600' },
@@ -35,6 +35,15 @@ export default function TabsLayout() {
           title: 'รายการ',
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="list-outline" size={size} color={iconColor(color, palette.muted)} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="reports"
+        options={{
+          title: 'รายงาน',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="bar-chart-outline" size={size} color={iconColor(color, palette.muted)} />
           ),
         }}
       />

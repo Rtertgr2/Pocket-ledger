@@ -1,23 +1,68 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
+import Constants from 'expo-constants';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { useCallback, useState, type ComponentProps, type ReactNode } from 'react';
+import { Alert, ScrollView, Text, View } from 'react-native';
+import { useBackup } from '../../hooks/useBackup';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
+import { PressableScale } from '../../components/common/PressableScale';
 import { Screen } from '../../components/common/Screen';
 import { TextField } from '../../components/common/TextField';
 import { useToast } from '../../components/common/Toast';
 import { makeStyles, useTheme } from '../../providers/ThemeProvider';
+import { SCHEMA_VERSION } from '../../services/db/schema';
+import { countTransactions } from '../../services/db/transactions';
 import { readBackupEndpoint, readBackupSecret, writeBackupConfig, type ThemeMode } from '../../services/storage/settings';
 import { useAppStore } from '../../store/useAppStore';
-import { radius, spacing } from '../../theme';
+import { cardShadow, radius, spacing, readableTextOn } from '../../theme';
 import { formatBaht } from '../../utils/money';
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string }[] = [
-  { mode: 'system', label: 'ตามระบบ' },
   { mode: 'light', label: 'สว่าง' },
+  { mode: 'system', label: 'ตามระบบ' },
   { mode: 'dark', label: 'มืด' },
 ];
+
+/** A group of cards under the small muted label the reference UI uses to chapter settings. */
+function Group({ label, children }: { label: string; children: ReactNode }) {
+  const styles = useStyles();
+  return (
+    <View style={styles.group}>
+      <Text style={styles.groupLabel}>{label}</Text>
+      {children}
+    </View>
+  );
+}
+
+/** Card header: tinted icon tile, title, and the one-line explanation under it. */
+function BlockHead({
+  icon,
+  title,
+  sub,
+  action,
+}: {
+  icon: ComponentProps<typeof Ionicons>['name'];
+  title: string;
+  sub?: string;
+  action?: ReactNode;
+}) {
+  const styles = useStyles();
+  const { palette } = useTheme();
+  return (
+    <View style={styles.blockHead}>
+      <View style={styles.tile}>
+        <Ionicons name={icon} size={18} color={palette.primaryText} />
+      </View>
+      <View style={styles.blockTexts}>
+        <Text style={styles.blockTitle}>{title}</Text>
+        {sub ? <Text style={styles.blockSub}>{sub}</Text> : null}
+      </View>
+      {action ? <View style={styles.blockAction}>{action}</View> : null}
+    </View>
+  );
+}
 
 export default function SettingsScreen() {
   const db = useSQLiteContext();
@@ -27,9 +72,16 @@ export default function SettingsScreen() {
 
   const accounts = useAppStore((s) => s.accounts);
   const fetchAccounts = useAppStore((s) => s.fetchAccounts);
+  const clearAllData = useAppStore((s) => s.clearAllData);
+  const { exporting, importing, pushing, exportToFile, importFromFile, pushToCloud } = useBackup(db);
 
   const [endpoint, setEndpoint] = useState(() => readBackupEndpoint());
   const [secret, setSecret] = useState(() => readBackupSecret());
+  const [transactionCount, setTransactionCount] = useState(0);
+  const [checking, setChecking] = useState(false);
+  const [updateNote, setUpdateNote] = useState('ตรวจสอบเวอร์ชันในเครื่องนี้ ยังไม่เชื่อมต่อเซิร์ฟเวอร์อัปเดต');
+
+  const appVersion = Constants.expoConfig?.version ?? '1.0.0';
 
   // Accounts can change in a modal, so the list re-reads on focus like the other tabs.
   useFocusEffect(
@@ -37,12 +89,53 @@ export default function SettingsScreen() {
       fetchAccounts(db).catch(() => {
         // A read failure leaves the last known list on screen; the next focus retries.
       });
+      countTransactions(db)
+        .then(setTransactionCount)
+        .catch(() => {
+          // Same contract as the account read: keep the last known number.
+        });
     }, [db, fetchAccounts])
   );
 
   function saveBackup() {
     writeBackupConfig(endpoint, secret);
     showToast('บันทึกการตั้งค่าสำรองข้อมูลแล้ว');
+  }
+
+  /** Irreversible, so it always asks first and names what survives (the theme). */
+  function confirmClear() {
+    Alert.alert(
+      'ล้างข้อมูลทั้งหมด?',
+      'รายการและบัญชีทั้งหมดจะถูกลบถาวรจากเครื่องนี้ การตั้งค่าธีมยังอยู่',
+      [
+        { text: 'ยกเลิก', style: 'cancel' },
+        {
+          text: 'ล้างข้อมูล',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await clearAllData(db);
+              setTransactionCount(0);
+              showToast('ล้างข้อมูลแล้ว');
+            } catch (error) {
+              showToast(error instanceof Error ? error.message : 'ล้างข้อมูลไม่สำเร็จ', 'error');
+            }
+          },
+        },
+      ]
+    );
+  }
+
+  /** No update channel yet: this confirms which build is installed, nothing is downloaded. */
+  function checkForUpdate() {
+    if (checking) return;
+    setChecking(true);
+    setUpdateNote('กำลังตรวจสอบเวอร์ชันที่ติดตั้ง…');
+    setTimeout(() => {
+      setChecking(false);
+      setUpdateNote(`คุณใช้เวอร์ชันล่าสุดที่ติดตั้งไว้ (v${appVersion}) — ยังไม่เชื่อมต่อเซิร์ฟเวอร์อัปเดต`);
+      showToast(`เวอร์ชัน v${appVersion}`);
+    }, 500);
   }
 
   return (
@@ -53,130 +146,271 @@ export default function SettingsScreen() {
           <Text style={styles.subtitle}>ข้อมูลทั้งหมดเก็บอยู่ในเครื่องคุณ</Text>
         </View>
 
-        <Card style={styles.card}>
-          <Text style={styles.sectionTitle}>ธีม</Text>
-          <View style={styles.segment}>
-            {THEME_OPTIONS.map((option) => {
-              const selected = option.mode === mode;
-              return (
-                <Pressable
-                  key={option.mode}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected }}
-                  onPress={() => setMode(option.mode)}
-                  style={[styles.segmentItem, selected ? styles.segmentSelected : null]}
+        <Group label="การแสดงผล">
+          <Card style={styles.card}>
+            <BlockHead icon="color-palette-outline" title="ธีม" sub="หน้าตาของแอป" />
+            <View style={styles.segment}>
+              {THEME_OPTIONS.map((option) => {
+                const selected = option.mode === mode;
+                return (
+                  <PressableScale
+                    key={option.mode}
+                    accessibilityRole="radio"
+                    accessibilityState={{ selected }}
+                    onPress={() => setMode(option.mode)}
+                    toScale={0.97}
+                    style={[styles.segmentItem, selected ? styles.segmentSelected : null]}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      style={[styles.segmentLabel, selected ? styles.segmentLabelSelected : null]}
+                    >
+                      {option.label}
+                    </Text>
+                  </PressableScale>
+                );
+              })}
+            </View>
+            <Text style={styles.hint}>เลือก “ตามระบบ” เพื่อเปลี่ยนตามการตั้งค่าของมือถือ</Text>
+          </Card>
+        </Group>
+
+        <Group label="บัญชีและการซิงก์">
+          <Card style={styles.card}>
+            <BlockHead
+              icon="wallet-outline"
+              title="บัญชี"
+              sub="กระเป๋าเงินและบัญชีที่ใช้บันทึก"
+              action={
+                <Text
+                  style={styles.link}
+                  accessibilityRole="link"
+                  onPress={() => router.push('/account/new')}
                 >
-                  <Text style={[styles.segmentLabel, selected ? styles.segmentLabelSelected : null]}>
-                    {option.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <Text style={styles.hint}>เลือก “ตามระบบ” เพื่อเปลี่ยนตามการตั้งค่าของมือถือ</Text>
-        </Card>
+                  + เพิ่มบัญชี
+                </Text>
+              }
+            />
+            {accounts.length === 0 ? (
+              <Text style={styles.hint}>ยังไม่มีบัญชี</Text>
+            ) : (
+              accounts.map((account) => (
+                <PressableScale
+                  key={account.id}
+                  accessibilityHint="เปิดหน้าจัดการบัญชี"
+                  onPress={() => router.push({ pathname: '/account/[id]', params: { id: account.id } })}
+                  style={styles.accountRow}
+                >
+                  <View style={[styles.accountBadge, { backgroundColor: account.color_hex }]}>
+                    <Text style={[styles.accountBadgeText, { color: readableTextOn(account.color_hex) }]}>
+                      {account.name.trim().slice(0, 2) || '??'}
+                    </Text>
+                  </View>
+                  <View style={styles.accountTexts}>
+                    <Text style={styles.accountName}>{account.name}</Text>
+                    <Text style={styles.hint}>{account.is_active === 1 ? 'ใช้งานอยู่' : 'ปิดใช้งาน'}</Text>
+                  </View>
+                  <Text style={styles.balance}>{formatBaht(account.balance_satang)}</Text>
+                </PressableScale>
+              ))
+            )}
+          </Card>
 
-        <Card style={styles.card}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.sectionTitle}>บัญชี</Text>
-            <Text style={styles.link} onPress={() => router.push('/account/new')}>
-              + เพิ่มบัญชี
+          <Card style={styles.card}>
+            <BlockHead
+              icon="cloud-upload-outline"
+              title="สำรองข้อมูลขึ้น Google Sheets"
+              sub="เก็บข้อมูลไว้ในสเปรดชีตของคุณ"
+            />
+            <TextField
+              label="Web App URL"
+              value={endpoint}
+              onChangeText={setEndpoint}
+              placeholder="https://script.google.com/macros/s/…/exec"
+              keyboardType="url"
+            />
+            <TextField
+              label="Secret key"
+              value={secret}
+              onChangeText={setSecret}
+              placeholder="รหัสลับที่ตั้งไว้ใน Apps Script"
+              secureTextEntry
+            />
+            <Button label="บันทึกการตั้งค่า" variant="secondary" onPress={saveBackup} />
+            <Button
+              label={pushing ? 'กำลังสำรองข้อมูล…' : 'สำรองข้อมูลขึ้นคลาวด์'}
+              disabled={pushing}
+              onPress={pushToCloud}
+            />
+            <Text style={styles.hint}>
+              ส่งข้อมูลทั้งหมดเป็น JSON ไปยัง Web App ที่คุณตั้งไว้ · ข้อมูลในเครื่องยังเป็นตัวจริง
             </Text>
-          </View>
-          {accounts.length === 0 ? (
-            <Text style={styles.hint}>ยังไม่มีบัญชี</Text>
-          ) : (
-            accounts.map((account) => (
-              <Pressable
-                key={account.id}
-                accessibilityRole="button"
-                accessibilityHint="เปิดหน้าจัดการบัญชี"
-                onPress={() => router.push({ pathname: '/account/[id]', params: { id: account.id } })}
-                style={({ pressed }) => [styles.accountRow, pressed ? styles.pressed : null]}
-              >
-                <View style={[styles.dot, { backgroundColor: account.color_hex }]} />
-                <View style={styles.accountTexts}>
-                  <Text style={styles.accountName}>{account.name}</Text>
-                  <Text style={styles.hint}>{account.is_active === 1 ? 'ใช้งานอยู่' : 'ปิดใช้งาน'}</Text>
-                </View>
-                <Text style={styles.balance}>{formatBaht(account.balance_satang)}</Text>
-              </Pressable>
-            ))
-          )}
-        </Card>
+          </Card>
 
-        <Card style={styles.card}>
-          <Text style={styles.sectionTitle}>สำรองข้อมูลขึ้น Google Sheets</Text>
-          <TextField
-            label="Web App URL"
-            value={endpoint}
-            onChangeText={setEndpoint}
-            placeholder="https://script.google.com/macros/s/…/exec"
-            keyboardType="url"
-          />
-          <TextField
-            label="Secret key"
-            value={secret}
-            onChangeText={setSecret}
-            placeholder="รหัสลับที่ตั้งไว้ใน Apps Script"
-            secureTextEntry
-          />
-          <Button label="บันทึกการตั้งค่า" onPress={saveBackup} />
-          <Text style={styles.hint}>
-            เก็บไว้ในเครื่องเท่านั้น ยังไม่มีการส่งข้อมูลออกไป — ระบบอัปโหลดจะมาใน Phase 5
-          </Text>
-        </Card>
+          <Card style={styles.card}>
+            <BlockHead
+              icon="document-text-outline"
+              title="ไฟล์สำรอง (JSON)"
+              sub="ย้ายเครื่อง / กู้คืนฉุกเฉิน"
+            />
+            <View style={styles.actions}>
+              <Button
+                label={exporting ? 'กำลังเตรียม…' : 'ส่งออกไฟล์'}
+                variant="secondary"
+                disabled={exporting}
+                onPress={exportToFile}
+                style={styles.action}
+              />
+              <Button
+                label={importing ? 'กำลังนำเข้า…' : 'นำเข้าไฟล์'}
+                variant="secondary"
+                disabled={importing}
+                onPress={async () => {
+                  await importFromFile();
+                  // The screen is already focused, so the count has to be re-read here.
+                  setTransactionCount(await countTransactions(db).catch(() => transactionCount));
+                }}
+                style={styles.action}
+              />
+            </View>
+            <Text style={styles.hint}>
+              ส่งออกเป็น .json ผ่านแผงแชร์ของเครื่อง · นำเข้าแล้วเพิ่มเฉพาะรายการที่ยังไม่มี
+              (ตรวจ UUID ก่อนเขียน ไม่ทับข้อมูลเดิม)
+            </Text>
+          </Card>
+        </Group>
 
-        <Card style={styles.card}>
-          <Text style={styles.sectionTitle}>ข้อมูลในเครื่อง</Text>
-          <Text style={styles.hint}>
-            ฐานข้อมูล: pocket-ledger.db (SQLite, ออฟไลน์ 100%){'\n'}
-            ทุกยอดเงินคำนวณจากรายการ ไม่มียอดที่พิมพ์ค้างไว้
-          </Text>
-        </Card>
+        <Group label="ข้อมูลและแอป">
+          <Card style={styles.card}>
+            <BlockHead
+              icon="information-circle-outline"
+              title="ข้อมูลในเครื่อง"
+              sub={`${transactionCount} รายการ · ${accounts.length} บัญชี`}
+            />
+            <Text style={styles.hint}>
+              เก็บในเครื่องนี้ · SQLite ออฟไลน์ 100% ทุกยอดคำนวณจากรายการ ไม่มียอดที่พิมพ์ค้างไว้
+            </Text>
+            <Text style={styles.danger} accessibilityRole="button" onPress={confirmClear}>
+              ล้างข้อมูลทั้งหมด
+            </Text>
+          </Card>
+
+          <Card style={styles.card}>
+            <BlockHead icon="cube-outline" title="เกี่ยวกับแอป" sub="Pocket Ledger" />
+            <View style={styles.versionRow}>
+              <Text style={styles.versionLabel}>เวอร์ชันปัจจุบัน</Text>
+              <Text style={styles.versionValue}>{`v${appVersion}`}</Text>
+            </View>
+            <View style={styles.versionRow}>
+              <Text style={styles.versionLabel}>รูปแบบฐานข้อมูล</Text>
+              <Text style={styles.versionValue}>{`schema v${SCHEMA_VERSION}`}</Text>
+            </View>
+            <Button
+              label={checking ? 'กำลังตรวจสอบ…' : 'ตรวจสอบอัปเดต'}
+              variant="secondary"
+              disabled={checking}
+              onPress={checkForUpdate}
+            />
+            <Text style={styles.hint}>{updateNote}</Text>
+          </Card>
+        </Group>
       </ScrollView>
     </Screen>
   );
 }
 
 const useStyles = makeStyles((palette) => ({
-  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md },
+  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg },
   header: { paddingTop: spacing.md, gap: 2 },
-  title: { fontSize: 24, fontWeight: '800' as const, color: palette.text },
-  subtitle: { fontSize: 12, color: palette.muted },
-  card: { gap: spacing.sm },
-  rowBetween: {
-    flexDirection: 'row' as const,
-    alignItems: 'center' as const,
-    justifyContent: 'space-between' as const,
+  title: { fontSize: 25, fontWeight: '700' as const, letterSpacing: -0.3, color: palette.text },
+  subtitle: { fontSize: 13, color: palette.muted },
+  group: { gap: spacing.md },
+  groupLabel: {
+    fontSize: 12,
+    fontWeight: '700' as const,
+    color: palette.muted,
+    letterSpacing: 0.1,
+    marginHorizontal: spacing.xs,
   },
-  sectionTitle: { fontSize: 16, fontWeight: '700' as const, color: palette.text },
-  link: { fontSize: 13, fontWeight: '600' as const, color: palette.primary },
-  hint: { fontSize: 12, color: palette.muted },
+  card: { gap: spacing.md },
+  blockHead: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: spacing.sm },
+  tile: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+    backgroundColor: palette.primarySoft,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  blockTexts: { flex: 1, gap: 1, minWidth: 0 },
+  blockTitle: { fontSize: 15, fontWeight: '700' as const, color: palette.text },
+  blockSub: { fontSize: 12, color: palette.muted },
+  blockAction: { marginLeft: 'auto' as const },
+  link: { fontSize: 13, fontWeight: '700' as const, color: palette.primaryText },
+  hint: { fontSize: 12, color: palette.muted, lineHeight: 17 },
+  danger: { fontSize: 13, fontWeight: '700' as const, color: palette.expense, paddingVertical: spacing.xs },
+  actions: { flexDirection: 'row' as const, gap: spacing.sm },
+  action: { flex: 1 },
+  versionRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'baseline' as const,
+    justifyContent: 'space-between' as const,
+    gap: spacing.md,
+  },
+  versionLabel: { fontSize: 13, color: palette.muted },
+  versionValue: {
+    fontSize: 15,
+    fontWeight: '700' as const,
+    color: palette.text,
+    fontVariant: ['tabular-nums'] as const,
+  },
+  // Track and pill: the selection reads as a raised chip on the track, not as a filled button.
+  // The inner padding and 4pt gaps keep the three labels from touching the chip edge and each
+  // other, and the 44pt height is the smallest comfortable touch target.
   segment: {
     flexDirection: 'row' as const,
     backgroundColor: palette.surfaceMuted,
-    borderRadius: radius.md,
-    padding: 4,
-    gap: 4,
+    borderRadius: radius.md - 2,
+    padding: spacing.xs,
+    gap: spacing.xs,
   },
   segmentItem: {
     flex: 1,
-    paddingVertical: spacing.sm,
+    minHeight: 44,
+    paddingHorizontal: spacing.sm,
     borderRadius: radius.sm,
     alignItems: 'center' as const,
+    justifyContent: 'center' as const,
   },
-  segmentSelected: { backgroundColor: palette.surface },
-  segmentLabel: { fontSize: 13, fontWeight: '600' as const, color: palette.muted },
+  segmentSelected: {
+    backgroundColor: palette.surface,
+    ...cardShadow,
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  segmentLabel: {
+    fontSize: 13,
+    lineHeight: 18,
+    fontWeight: '600' as const,
+    color: palette.muted,
+    textAlign: 'center' as const,
+  },
   segmentLabelSelected: { color: palette.text },
   accountRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: spacing.md,
-    paddingVertical: spacing.sm,
+    paddingVertical: spacing.xs,
   },
-  pressed: { opacity: 0.6 },
-  dot: { width: 10, height: 10, borderRadius: 5 },
+  accountBadge: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  accountBadgeText: { fontSize: 12, fontWeight: '700' as const },
   accountTexts: { flex: 1, gap: 1 },
   accountName: { fontSize: 14, fontWeight: '600' as const, color: palette.text },
   balance: {

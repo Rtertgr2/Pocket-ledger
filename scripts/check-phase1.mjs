@@ -129,7 +129,14 @@ try {
   assert.equal(query("SELECT balance_satang AS b FROM v_account_balances WHERE id='cash'")[0].b, 48000);
   assert.equal(query("SELECT balance_satang AS b FROM v_account_balances WHERE id='kbank'")[0].b, -799900);
 
-  console.log('Phase 1 check passed: schema, constraints, derived balances, transfer exclusion, money parsing.');
+  // clearLedger's order: transactions first (accounts are ON DELETE RESTRICT), then accounts.
+  // The statement order is what makes "ล้างข้อมูลทั้งหมด" possible at all.
+  query('DELETE FROM transactions');
+  query('DELETE FROM accounts');
+  assert.equal(query('SELECT COUNT(*) AS n FROM transactions')[0].n, 0, 'clearLedger empties transactions');
+  assert.equal(query('SELECT COUNT(*) AS n FROM accounts')[0].n, 0, 'clearLedger empties accounts');
+
+  console.log('Phase 1 check passed: schema, constraints, derived balances, transfer exclusion, ledger wipe, money parsing.');
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }

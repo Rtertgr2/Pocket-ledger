@@ -12,6 +12,7 @@ function tx(partial: Partial<Transaction>): Transaction {
     type: 'EXPENSE',
     amount_satang: 100,
     note: null,
+    category: null,
     is_excluded_from_average: 0,
     transaction_date: new Date(2026, 9, 29, 10, 0).toISOString(),
     created_at: '',

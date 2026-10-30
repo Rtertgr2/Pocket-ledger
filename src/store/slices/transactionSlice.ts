@@ -7,6 +7,7 @@ import {
   listTransactions,
   sumExpensesInRange,
 } from '../../services/db/transactions';
+import { clearLedger } from '../../services/db/reset';
 import { getAccountBalance } from '../../services/db/accounts';
 import { calculateDailyBurnRate, daysInMonth, monthRange } from '../../utils/calculations';
 import type {
@@ -17,16 +18,24 @@ import type {
 } from '../../types';
 import type { AppStore } from '../useAppStore';
 
+/** One page of the ledger. Kept small enough that a year of entries still streams in. */
+export const LEDGER_PAGE_SIZE = 50;
+
 export interface TransactionSlice {
-  /** Newest first, capped at the ledger screen's page size. */
+  /** Newest first, only the pages loaded so far. */
   transactions: Transaction[];
+  hasMore: boolean;
   burnRateSatang: number;
   monthExpenseSatang: number;
   addTransaction: (db: SQLiteDatabase, dto: CreateTransactionDTO) => Promise<void>;
   transferFunds: (db: SQLiteDatabase, dto: TransferFundsDTO) => Promise<void>;
   deleteTransaction: (db: SQLiteDatabase, id: string) => Promise<void>;
+  /** Wipes every account and transaction; settings are kept. */
+  clearAllData: (db: SQLiteDatabase) => Promise<void>;
   reconcileBalance: (db: SQLiteDatabase, dto: ReconcileBalanceDTO) => Promise<void>;
+  /** Reloads the first page; every write calls this so the list cannot go stale. */
   fetchTransactions: (db: SQLiteDatabase) => Promise<void>;
+  loadMoreTransactions: (db: SQLiteDatabase) => Promise<void>;
   fetchBurnRate: (db: SQLiteDatabase, now?: Date) => Promise<void>;
   refreshAll: (db: SQLiteDatabase) => Promise<void>;
 }
@@ -42,6 +51,7 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
 
   return {
     transactions: [],
+    hasMore: false,
     burnRateSatang: 0,
     monthExpenseSatang: 0,
 
@@ -52,6 +62,7 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
         type: dto.type,
         amount_satang: dto.amount_satang,
         note: dto.note,
+        category: dto.category,
         is_excluded_from_average: dto.is_excluded_from_average,
         transaction_date: dto.transaction_date ?? new Date().toISOString(),
       });
@@ -81,6 +92,11 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
       await refresh(db);
     },
 
+    clearAllData: async (db) => {
+      await clearLedger(db);
+      await refresh(db);
+    },
+
     reconcileBalance: async (db, dto) => {
       const delta = dto.actual_balance_satang - (await getAccountBalance(db, dto.account_id));
       if (delta === 0) return; // nothing to record, and a 0 amount would violate the CHECK
@@ -97,7 +113,19 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
     },
 
     fetchTransactions: async (db) => {
-      set({ transactions: await listTransactions(db) });
+      // One extra row tells us whether another page exists without a COUNT query.
+      const rows = await listTransactions(db, LEDGER_PAGE_SIZE + 1);
+      set({ transactions: rows.slice(0, LEDGER_PAGE_SIZE), hasMore: rows.length > LEDGER_PAGE_SIZE });
+    },
+
+    loadMoreTransactions: async (db) => {
+      const { transactions, hasMore } = get();
+      if (!hasMore) return;
+      const rows = await listTransactions(db, LEDGER_PAGE_SIZE + 1, transactions.length);
+      set({
+        transactions: [...transactions, ...rows.slice(0, LEDGER_PAGE_SIZE)],
+        hasMore: rows.length > LEDGER_PAGE_SIZE,
+      });
     },
 
     fetchBurnRate: async (db, now = new Date()) => {

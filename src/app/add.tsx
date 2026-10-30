@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
 import { Pressable, Text, View } from 'react-native';
+import { EXPENSE_CATEGORIES } from '../categories';
 import { AccountPicker } from '../components/common/AccountPicker';
 import { AmountInput } from '../components/common/AmountInput';
 import { Button } from '../components/common/Button';
@@ -27,6 +28,7 @@ export default function AddTransactionScreen() {
   const [type, setType] = useState<EntryType>('EXPENSE');
   const [amountText, setAmountText] = useState('');
   const [note, setNote] = useState('');
+  const [category, setCategory] = useState<string | null>(null);
   const [accountId, setAccountId] = useState<string | null>(
     params.accountId ?? accounts[0]?.id ?? null
   );
@@ -44,6 +46,8 @@ export default function AddTransactionScreen() {
         type,
         amount_satang: satang,
         note: note.trim() || undefined,
+        // Income is not categorised: the reports only break down expenses.
+        category: type === 'EXPENSE' ? (category ?? undefined) : undefined,
       });
       showToast('บันทึกสำเร็จ');
       router.back();
@@ -78,11 +82,35 @@ export default function AddTransactionScreen() {
 
       <AccountPicker label="บัญชี" accounts={accounts} selectedId={accountId} onSelect={setAccountId} />
 
+      {type === 'EXPENSE' ? (
+        <View style={styles.field}>
+          <Text style={styles.fieldLabel}>หมวดหมู่ (ไม่บังคับ)</Text>
+          <View style={styles.chips}>
+            {EXPENSE_CATEGORIES.map((option) => {
+              const selected = option === category;
+              return (
+                <Pressable
+                  key={option}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected }}
+                  onPress={() => setCategory(selected ? null : option)}
+                  style={[styles.chip, selected ? styles.chipSelected : null]}
+                >
+                  <Text style={[styles.chipLabel, selected ? styles.chipLabelSelected : null]}>
+                    {option}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
+        </View>
+      ) : null}
+
       <TextField
-        label="บันทึกช่วยจำ (ไม่บังคับ)"
+        label="หมายเหตุ (ไม่บังคับ)"
         value={note}
         onChangeText={setNote}
-        placeholder="เช่น กาแฟ, ค่าโดยสาร"
+        placeholder="เช่น กาแฟเย็น"
         maxLength={120}
       />
 
@@ -110,5 +138,19 @@ const useStyles = makeStyles((palette) => ({
   toggleSelected: { backgroundColor: palette.surface },
   toggleLabel: { fontSize: 14, fontWeight: '600' as const, color: palette.muted },
   toggleLabelSelected: { color: palette.text },
+  field: { gap: spacing.sm },
+  fieldLabel: { fontSize: 13, fontWeight: '600' as const, color: palette.muted },
+  chips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: spacing.sm },
+  chip: {
+    paddingVertical: spacing.sm + 1,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.pill,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  chipSelected: { backgroundColor: palette.primary, borderColor: palette.primary },
+  chipLabel: { fontSize: 13, fontWeight: '600' as const, color: palette.text },
+  chipLabelSelected: { color: palette.onPrimary },
   error: { fontSize: 12, color: palette.expense },
 }));

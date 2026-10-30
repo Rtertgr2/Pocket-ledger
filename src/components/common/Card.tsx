@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { StyleSheet, View, type ViewStyle } from 'react-native';
+import { View, type ViewStyle } from 'react-native';
 import { makeStyles } from '../../providers/ThemeProvider';
-import { radius, spacing } from '../../theme';
+import { cardShadow, radius, spacing } from '../../theme';
 
 export function Card({ children, style }: { children: ReactNode; style?: ViewStyle }) {
   const styles = useStyles();
@@ -11,9 +11,10 @@ export function Card({ children, style }: { children: ReactNode; style?: ViewSty
 const useStyles = makeStyles((palette) => ({
   card: {
     backgroundColor: palette.surface,
-    borderRadius: radius.md,
+    borderRadius: radius.card,
     padding: spacing.lg,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderColor: palette.border,
+    ...cardShadow,
   },
 }));

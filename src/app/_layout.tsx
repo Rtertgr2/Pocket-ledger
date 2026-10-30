@@ -1,6 +1,9 @@
 import { Stack } from 'expo-router';
+import * as QuickActions from 'expo-quick-actions';
+import { useQuickActionRouting, type RouterAction } from 'expo-quick-actions/router';
 import { SQLiteProvider } from 'expo-sqlite';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ToastProvider } from '../components/common/Toast';
 import { ThemeProvider, useTheme } from '../providers/ThemeProvider';
@@ -20,6 +23,39 @@ export default function RootLayout() {
   );
 }
 
+/**
+ * Launcher shortcuts: long-press the app icon to reach the two entry screens. Registration is
+ * best-effort — a launcher that refuses shortcuts (or a platform without them) must not affect
+ * the ledger itself.
+ */
+function QuickActionsBridge() {
+  useQuickActionRouting();
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        if (!(await QuickActions.isSupported())) return;
+        if (cancelled) return;
+        await QuickActions.setItems<RouterAction>([
+          { id: 'add-expense', title: 'เพิ่มรายจ่าย', icon: 'compose', params: { href: '/add' } },
+          { id: 'transfer', title: 'โอนเงิน', icon: 'share', params: { href: '/transfer' } },
+        ]);
+      } catch (error) {
+        // A missing shortcut is a cosmetic loss; surfacing it as a crash would not be.
+        console.warn('quick actions unavailable', error);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return null;
+}
+
 /** Kept separate so the stack can read the palette: modals share one header treatment. */
 function RootStack() {
   const { palette, scheme } = useTheme();
@@ -29,12 +65,13 @@ function RootStack() {
     headerShown: true,
     headerShadowVisible: false,
     headerStyle: { backgroundColor: palette.bg },
-    headerTintColor: palette.primary,
+    headerTintColor: palette.primaryText,
     headerTitleStyle: { color: palette.text, fontWeight: '700' as const },
   };
 
   return (
     <>
+      <QuickActionsBridge />
       <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
       <Stack
         screenOptions={{

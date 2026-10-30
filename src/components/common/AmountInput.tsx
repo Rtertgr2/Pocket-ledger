@@ -32,7 +32,7 @@ export function AmountInput({ value, onChangeText, autoFocus = true, placeholder
         inputMode="decimal"
         placeholder={placeholder}
         placeholderTextColor={palette.muted}
-        selectionColor={palette.primary}
+        selectionColor={palette.primaryText}
         accessibilityLabel="จำนวนเงิน"
         style={styles.input}
       />

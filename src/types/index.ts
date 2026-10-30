@@ -25,6 +25,8 @@ export interface Transaction {
   type: TransactionType;
   amount_satang: number;
   note: string | null;
+  /** Free text from a fixed list; NULL for rows written before categories existed. */
+  category: string | null;
   is_excluded_from_average: number;
   transaction_date: string;
   created_at: string;
@@ -42,6 +44,7 @@ export interface CreateTransactionDTO {
   type: Exclude<TransactionType, 'TRANSFER'>;
   amount_satang: number;
   note?: string;
+  category?: string;
   is_excluded_from_average?: number;
   transaction_date?: string;
 }
@@ -57,4 +60,11 @@ export interface TransferFundsDTO {
 export interface ReconcileBalanceDTO {
   account_id: string;
   actual_balance_satang: number;
+}
+
+/** The three columns a report needs, so aggregation stays independent of the row shape. */
+export interface ReportExpense {
+  amount_satang: number;
+  category: string | null;
+  transaction_date: string;
 }

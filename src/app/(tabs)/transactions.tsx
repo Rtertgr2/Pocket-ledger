@@ -1,7 +1,8 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
-import { Pressable, RefreshControl, SectionList, Text, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, SectionList, Text, View } from 'react-native';
+import { PressableScale } from '../../components/common/PressableScale';
 import { Screen } from '../../components/common/Screen';
 import { useToast } from '../../components/common/Toast';
 import { TransactionItem } from '../../components/transactions/TransactionItem';
@@ -10,6 +11,7 @@ import { makeStyles, useTheme } from '../../providers/ThemeProvider';
 import { useAppStore } from '../../store/useAppStore';
 import { radius, spacing } from '../../theme';
 import { groupByDay } from '../../utils/formatters';
+import { formatBaht } from '../../utils/money';
 
 export default function TransactionsScreen() {
   const db = useSQLiteContext();
@@ -20,8 +22,11 @@ export default function TransactionsScreen() {
 
   const accounts = useAppStore((s) => s.accounts);
   const transactions = useAppStore((s) => s.transactions);
+  const hasMore = useAppStore((s) => s.hasMore);
   const refreshAll = useAppStore((s) => s.refreshAll);
+  const loadMoreTransactions = useAppStore((s) => s.loadMoreTransactions);
   const confirmDelete = useDeleteTransaction(db);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -49,11 +54,27 @@ export default function TransactionsScreen() {
   );
   const sections = useMemo(() => groupByDay(transactions), [transactions]);
 
+  // The ledger only holds the pages fetched so far; appending one page at a time keeps the
+  // first paint fast even after a year of entries.
+  async function onEndReached() {
+    if (!hasMore || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      await loadMoreTransactions(db);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'โหลดรายการเพิ่มไม่สำเร็จ', 'error');
+    } finally {
+      setLoadingMore(false);
+    }
+  }
+
   return (
     <Screen padded={false}>
       <View style={styles.header}>
         <Text style={styles.title}>รายการทั้งหมด</Text>
-        <Text style={styles.subtitle}>{transactions.length} รายการล่าสุด</Text>
+        <Text style={styles.subtitle}>
+          {transactions.length} รายการล่าสุด{hasMore ? ' · เลื่อนลงเพื่อดูเพิ่ม' : ''}
+        </Text>
       </View>
 
       <SectionList
@@ -65,22 +86,44 @@ export default function TransactionsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={palette.primary}
-            colors={[palette.primary]}
+            tintColor={palette.primaryText}
+            colors={[palette.primaryText]}
             progressBackgroundColor={palette.surface}
           />
         }
-        renderSectionHeader={({ section }) => <Text style={styles.sectionHeader}>{section.title}</Text>}
+        onEndReached={onEndReached}
+        onEndReachedThreshold={0.4}
+        renderSectionHeader={({ section }) => {
+          const income = section.data
+            .filter((item) => item.type === 'INCOME')
+            .reduce((sum, item) => sum + item.amount_satang, 0);
+          const expense = section.data
+            .filter((item) => item.type === 'EXPENSE')
+            .reduce((sum, item) => sum + item.amount_satang, 0);
+          return (
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{section.title}</Text>
+              <Text style={styles.sectionSums}>
+                รับ {formatBaht(income)} · จ่าย {formatBaht(expense)}
+              </Text>
+            </View>
+          );
+        }}
         renderItem={({ item }) => (
-          <View style={styles.row}>
-            <TransactionItem
-              transaction={item}
-              accountLabel={nameOf(item.account_id)}
-              destinationLabel={item.destination_account_id ? nameOf(item.destination_account_id) : undefined}
-              onLongPress={() => confirmDelete(item)}
-            />
-          </View>
+          <TransactionItem
+            transaction={item}
+            accountLabel={nameOf(item.account_id)}
+            destinationLabel={item.destination_account_id ? nameOf(item.destination_account_id) : undefined}
+            onLongPress={() => confirmDelete(item)}
+          />
         )}
+        ListFooterComponent={
+          loadingMore ? (
+            <ActivityIndicator style={styles.footer} color={palette.primaryText} />
+          ) : hasMore ? undefined : transactions.length > 0 ? (
+            <Text style={styles.footerText}>สิ้นสุดรายการ</Text>
+          ) : undefined
+        }
         ListEmptyComponent={
           <View style={styles.empty}>
             <Text style={styles.emptyTitle}>ยังไม่มีรายการ</Text>
@@ -89,35 +132,43 @@ export default function TransactionsScreen() {
         }
       />
 
-      <Pressable
-        accessibilityRole="button"
+      <PressableScale
         accessibilityLabel="บันทึกรายการใหม่"
         onPress={() => router.push('/add')}
-        style={({ pressed }) => [styles.fab, pressed ? styles.fabPressed : null]}
+        toScale={0.94}
+        style={styles.fab}
       >
         <Text style={styles.fabLabel}>+</Text>
-      </Pressable>
+      </PressableScale>
     </Screen>
   );
 }
 
 const useStyles = makeStyles((palette) => ({
   header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: 2 },
-  title: { fontSize: 24, fontWeight: '800' as const, color: palette.text },
+  title: { fontSize: 25, fontWeight: '700' as const, letterSpacing: -0.3, color: palette.text },
   subtitle: { fontSize: 12, color: palette.muted },
-  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl * 2 },
+  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl * 2, gap: spacing.sm },
   sectionHeader: {
-    fontSize: 12,
-    fontWeight: '700' as const,
-    color: palette.muted,
+    flexDirection: 'row' as const,
+    alignItems: 'baseline' as const,
+    justifyContent: 'space-between' as const,
+    gap: spacing.sm,
     paddingTop: spacing.lg,
     paddingBottom: spacing.xs,
   },
-  row: {
-    backgroundColor: palette.surface,
-    paddingHorizontal: spacing.md,
-    borderBottomWidth: 1,
-    borderBottomColor: palette.border,
+  sectionTitle: { fontSize: 12, fontWeight: '700' as const, color: palette.muted },
+  sectionSums: {
+    fontSize: 11,
+    color: palette.muted,
+    fontVariant: ['tabular-nums'] as const,
+  },
+  footer: { paddingVertical: spacing.lg },
+  footerText: {
+    textAlign: 'center' as const,
+    paddingVertical: spacing.lg,
+    fontSize: 11,
+    color: palette.muted,
   },
   empty: { alignItems: 'center' as const, paddingTop: spacing.xxl, gap: spacing.xs },
   emptyTitle: { fontSize: 16, fontWeight: '700' as const, color: palette.text },
@@ -133,6 +184,5 @@ const useStyles = makeStyles((palette) => ({
     justifyContent: 'center' as const,
     elevation: 4,
   },
-  fabPressed: { opacity: 0.9 },
   fabLabel: { color: palette.onPrimary, fontSize: 28, fontWeight: '600' as const, marginTop: -2 },
 }));
