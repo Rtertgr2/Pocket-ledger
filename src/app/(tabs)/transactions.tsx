@@ -1,5 +1,5 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
@@ -17,7 +17,7 @@ import { Screen } from '../../components/common/Screen';
 import { useToast } from '../../components/common/Toast';
 import { TransactionItem } from '../../components/transactions/TransactionItem';
 import { EXPENSE_CATEGORIES } from '../../categories';
-import { useDeleteTransaction } from '../../hooks/useDeleteTransaction';
+import { useTransactionMenu } from '../../hooks/useTransactionMenu';
 import { makeStyles, useTheme } from '../../providers/ThemeProvider';
 import type { TransactionFilter } from '../../services/db/transactions';
 import { useAppStore } from '../../store/useAppStore';
@@ -47,7 +47,7 @@ export default function TransactionsScreen() {
   const refreshAll = useAppStore((s) => s.refreshAll);
   const loadMoreTransactions = useAppStore((s) => s.loadMoreTransactions);
   const setLedgerFilter = useAppStore((s) => s.setLedgerFilter);
-  const confirmDelete = useDeleteTransaction(db);
+  const openMenu = useTransactionMenu(db);
 
   const reload = useCallback(async () => {
     try {
@@ -261,7 +261,13 @@ export default function TransactionsScreen() {
             destinationLabel={
               item.destination_account_id ? nameOf(item.destination_account_id) : undefined
             }
-            onLongPress={() => confirmDelete(item)}
+            onPress={() =>
+              router.push({
+                pathname: item.type === 'TRANSFER' ? '/transfer' : '/add',
+                params: { id: item.id },
+              })
+            }
+            onLongPress={() => openMenu(item)}
           />
         )}
         ListFooterComponent={

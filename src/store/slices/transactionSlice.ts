@@ -7,6 +7,7 @@ import {
   searchTransactions,
   sumExpensesInRange,
   sumIncomeInRange,
+  updateTransactionById,
   type TransactionFilter,
 } from '../../services/db/transactions';
 import { clearLedger } from '../../services/db/reset';
@@ -17,6 +18,7 @@ import type {
   ReconcileBalanceDTO,
   Transaction,
   TransferFundsDTO,
+  UpdateTransactionDTO,
 } from '../../types';
 import type { AppStore } from '../useAppStore';
 
@@ -35,6 +37,8 @@ export interface TransactionSlice {
   ledgerFilter: TransactionFilter;
   setLedgerFilter: (db: SQLiteDatabase, filter: TransactionFilter) => Promise<void>;
   addTransaction: (db: SQLiteDatabase, dto: CreateTransactionDTO) => Promise<void>;
+  /** Rewrites a row in place, then re-reads balances and reports so no screen shows stale money. */
+  updateTransaction: (db: SQLiteDatabase, dto: UpdateTransactionDTO) => Promise<void>;
   transferFunds: (db: SQLiteDatabase, dto: TransferFundsDTO) => Promise<void>;
   deleteTransaction: (db: SQLiteDatabase, id: string) => Promise<void>;
   /** Wipes every account and transaction; settings are kept. */
@@ -80,6 +84,24 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
         is_excluded_from_average: dto.is_excluded_from_average,
         transaction_date: dto.transaction_date ?? new Date().toISOString(),
       });
+      await refresh(db);
+    },
+
+    updateTransaction: async (db, dto) => {
+      if (dto.type === 'TRANSFER' && dto.account_id === dto.destination_account_id) {
+        throw new Error('source and destination must differ');
+      }
+      const changes = await updateTransactionById(db, dto.id, {
+        account_id: dto.account_id,
+        destination_account_id: dto.type === 'TRANSFER' ? dto.destination_account_id ?? null : null,
+        type: dto.type,
+        amount_satang: dto.amount_satang,
+        note: dto.note,
+        category: dto.category,
+        is_excluded_from_average: dto.is_excluded_from_average,
+        transaction_date: dto.transaction_date,
+      });
+      if (changes === 0) throw new Error(`transaction ${dto.id} not found`);
       await refresh(db);
     },
 

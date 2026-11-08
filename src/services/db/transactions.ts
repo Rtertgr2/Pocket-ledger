@@ -76,6 +76,11 @@ export async function updateTransactionById(
   return result.changes;
 }
 
+/** One row by id, for the edit forms. The store's list is paged and filtered, so it cannot be trusted. */
+export function getTransactionById(db: SQLiteDatabase, id: string): Promise<Transaction | null> {
+  return db.getFirstAsync<Transaction>('SELECT * FROM transactions WHERE id = ?', id);
+}
+
 /** Returns the number of rows removed; 0 means the id did not exist. */
 export async function deleteTransactionById(db: SQLiteDatabase, id: string): Promise<number> {
   const result = await db.runAsync('DELETE FROM transactions WHERE id = ?', id);

@@ -1,7 +1,7 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState } from 'react';
-import { Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Text, View } from 'react-native';
 import { categoriesFor } from '../categories';
 import { AmountInput } from '../components/common/AmountInput';
 import { Button } from '../components/common/Button';
@@ -10,10 +10,12 @@ import { FormScreen } from '../components/common/FormScreen';
 import { Segmented } from '../components/common/Segmented';
 import { TextField } from '../components/common/TextField';
 import { useToast } from '../components/common/Toast';
-import { makeStyles } from '../providers/ThemeProvider';
+import { makeStyles, useTheme } from '../providers/ThemeProvider';
+import { getTransactionById } from '../services/db/transactions';
 import { useAppStore } from '../store/useAppStore';
 import { spacing } from '../theme';
-import { parseAmountToSatang } from '../utils/money';
+import type { Transaction } from '../types';
+import { formatSatang, parseAmountToSatang } from '../utils/money';
 
 type EntryType = 'EXPENSE' | 'INCOME';
 
@@ -25,11 +27,14 @@ const TYPE_OPTIONS = [
 export default function AddTransactionScreen() {
   const db = useSQLiteContext();
   const { showToast } = useToast();
+  const { palette } = useTheme();
   const styles = useStyles();
-  const params = useLocalSearchParams<{ accountId?: string }>();
+  const params = useLocalSearchParams<{ accountId?: string; id?: string }>();
+  const editingId = params.id ?? null;
 
   const accounts = useAppStore((s) => s.accounts).filter((account) => account.is_active === 1);
   const addTransaction = useAppStore((s) => s.addTransaction);
+  const updateTransaction = useAppStore((s) => s.updateTransaction);
 
   const [type, setType] = useState<EntryType>('EXPENSE');
   const [amountText, setAmountText] = useState('');
@@ -39,9 +44,51 @@ export default function AddTransactionScreen() {
     params.accountId ?? accounts[0]?.id ?? null
   );
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(Boolean(editingId));
+  // The full row, so the fields this form cannot edit survive a save untouched.
+  const [editing, setEditing] = useState<Transaction | null>(null);
+
+  useEffect(() => {
+    if (!editingId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const row = await getTransactionById(db, editingId);
+        if (cancelled) return;
+        // Transfers are edited by their own form; anything else here would rewrite it wrong.
+        if (!row || row.type === 'TRANSFER') {
+          showToast('ไม่พบรายการที่ต้องการแก้ไข', 'error');
+          router.back();
+          return;
+        }
+        setEditing(row);
+        setType(row.type);
+        setAmountText(formatSatang(row.amount_satang));
+        setNote(row.note ?? '');
+        setCategory(row.category);
+        setAccountId(row.account_id);
+      } catch (error) {
+        if (!cancelled) {
+          showToast(error instanceof Error ? error.message : 'โหลดรายการไม่สำเร็จ', 'error');
+          router.back();
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [db, editingId, showToast]);
 
   const satang = parseAmountToSatang(amountText);
   const canSave = Boolean(accountId) && satang !== null && satang > 0 && !saving;
+
+  // A row saved under a category that has since left the list still has to show its own value.
+  const options = useMemo(() => {
+    const list = categoriesFor(type);
+    return category && !list.includes(category) ? [category, ...list] : list;
+  }, [category, type]);
 
   function switchType(next: EntryType) {
     setType(next);
@@ -53,14 +100,28 @@ export default function AddTransactionScreen() {
     if (!accountId || satang === null || satang <= 0) return;
     setSaving(true);
     try {
-      await addTransaction(db, {
-        account_id: accountId,
-        type,
-        amount_satang: satang,
-        note: note.trim() || undefined,
-        category: category ?? undefined,
-      });
-      showToast('บันทึกสำเร็จ');
+      if (editing) {
+        await updateTransaction(db, {
+          id: editing.id,
+          account_id: accountId,
+          type,
+          amount_satang: satang,
+          note: note.trim() || null,
+          category: category ?? null,
+          is_excluded_from_average: editing.is_excluded_from_average,
+          transaction_date: editing.transaction_date,
+        });
+        showToast('บันทึกการแก้ไขแล้ว');
+      } else {
+        await addTransaction(db, {
+          account_id: accountId,
+          type,
+          amount_satang: satang,
+          note: note.trim() || undefined,
+          category: category ?? undefined,
+        });
+        showToast('บันทึกสำเร็จ');
+      }
       router.back();
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'บันทึกไม่สำเร็จ', 'error');
@@ -68,13 +129,31 @@ export default function AddTransactionScreen() {
     }
   }
 
+  if (loading) {
+    return (
+      <FormScreen footer={<></>}>
+        <ActivityIndicator style={styles.loading} color={palette.primaryText} />
+      </FormScreen>
+    );
+  }
+
+  const isEditing = Boolean(editing);
+
   return (
     <FormScreen
-      footer={<Button label={saving ? 'กำลังบันทึก…' : 'บันทึก'} onPress={onSave} disabled={!canSave} />}
+      footer={
+        <Button
+          label={saving ? 'กำลังบันทึก…' : isEditing ? 'บันทึกการแก้ไข' : 'บันทึก'}
+          onPress={onSave}
+          disabled={!canSave}
+        />
+      }
     >
+      <Stack.Screen options={{ title: isEditing ? 'แก้ไขรายการ' : 'บันทึกรายการ' }} />
+
       <Segmented options={TYPE_OPTIONS} value={type} onChange={switchType} label="ประเภทรายการ" />
 
-      <AmountInput value={amountText} onChangeText={setAmountText} />
+      <AmountInput value={amountText} onChangeText={setAmountText} autoFocus={!isEditing} />
 
       <View style={styles.field}>
         <Text style={styles.label}>บัญชี</Text>
@@ -93,7 +172,7 @@ export default function AddTransactionScreen() {
       <View style={styles.field}>
         <Text style={styles.label}>หมวดหมู่ (ไม่บังคับ)</Text>
         <View style={styles.chips}>
-          {categoriesFor(type).map((option) => (
+          {options.map((option) => (
             <Chip
               key={option}
               label={option}
@@ -124,4 +203,5 @@ const useStyles = makeStyles((palette) => ({
   label: { fontSize: 12, fontWeight: '600' as const, color: palette.muted },
   chips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: spacing.sm },
   error: { fontSize: 12, color: palette.expense },
+  loading: { paddingVertical: spacing.xxl },
 }));

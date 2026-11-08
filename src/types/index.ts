@@ -51,6 +51,22 @@ export interface CreateTransactionDTO {
   transaction_date?: string;
 }
 
+/**
+ * A full rewrite of an existing row. `transaction_date` and `is_excluded_from_average` are sent
+ * back unchanged until the form learns to edit them, so an edit can never silently drop them.
+ */
+export interface UpdateTransactionDTO {
+  id: string;
+  account_id: string;
+  destination_account_id?: string | null;
+  type: TransactionType;
+  amount_satang: number;
+  note?: string | null;
+  category?: string | null;
+  is_excluded_from_average?: number;
+  transaction_date: string;
+}
+
 export interface TransferFundsDTO {
   account_id: string;
   destination_account_id: string;

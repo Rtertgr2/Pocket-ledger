@@ -50,7 +50,7 @@ export function TransactionItem({
       onLongPress={onLongPress}
       delayLongPress={400}
       accessibilityLabel={`${transactionTitle(transaction)} ${formatBaht(transaction.amount_satang)}`}
-      accessibilityHint={onLongPress ? 'กดค้างเพื่อลบรายการ' : undefined}
+      accessibilityHint={onLongPress ? 'แตะเพื่อแก้ไข กดค้างเพื่อดูตัวเลือก' : undefined}
       style={styles.card}
     >
       <View style={[styles.iconChip, { backgroundColor: chipBackground }]}>

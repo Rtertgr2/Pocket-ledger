@@ -14,7 +14,7 @@ import { AccountRow } from '../../components/overview/AccountRow';
 import { CategoryRingCard } from '../../components/overview/CategoryRingCard';
 import { SummaryCard } from '../../components/overview/SummaryCard';
 import { TransactionItem } from '../../components/transactions/TransactionItem';
-import { useDeleteTransaction } from '../../hooks/useDeleteTransaction';
+import { useTransactionMenu } from '../../hooks/useTransactionMenu';
 import { makeStyles, useTheme } from '../../providers/ThemeProvider';
 import { listExpensesInRange } from '../../services/db/transactions';
 import { useAppStore } from '../../store/useAppStore';
@@ -41,7 +41,7 @@ export default function DashboardScreen() {
   const monthIncomeSatang = useAppStore((s) => s.monthIncomeSatang);
   const transactions = useAppStore((s) => s.transactions);
   const refreshAll = useAppStore((s) => s.refreshAll);
-  const confirmDelete = useDeleteTransaction(db);
+  const openMenu = useTransactionMenu(db);
 
   const reload = useCallback(async () => {
     try {
@@ -77,6 +77,11 @@ export default function DashboardScreen() {
   const recent = transactions.slice(0, RECENT_LIMIT);
   const nameOf = (id: string) => accounts.find((account) => account.id === id)?.name ?? 'ไม่พบบัญชี';
   const openAdd = (accountId?: string) => router.push({ pathname: '/add', params: { accountId } });
+  const openEdit = (transaction: Transaction) =>
+    router.push({
+      pathname: transaction.type === 'TRANSFER' ? '/transfer' : '/add',
+      params: { id: transaction.id },
+    });
   const monthLabel = formatMonthLabel(new Date());
 
   return (
@@ -190,7 +195,8 @@ export default function DashboardScreen() {
                       ? nameOf(transaction.destination_account_id)
                       : undefined
                   }
-                  onLongPress={() => confirmDelete(transaction)}
+                  onPress={() => openEdit(transaction)}
+                  onLongPress={() => openMenu(transaction)}
                 />
               </Entrance>
             ))}
