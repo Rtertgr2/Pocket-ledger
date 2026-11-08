@@ -1,17 +1,34 @@
-import { router, useFocusEffect } from 'expo-router';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
-import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, RefreshControl, SectionList, Text, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  SectionList,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { Chip } from '../../components/common/Chip';
 import { PressableScale } from '../../components/common/PressableScale';
 import { Screen } from '../../components/common/Screen';
 import { useToast } from '../../components/common/Toast';
 import { TransactionItem } from '../../components/transactions/TransactionItem';
+import { EXPENSE_CATEGORIES } from '../../categories';
 import { useDeleteTransaction } from '../../hooks/useDeleteTransaction';
 import { makeStyles, useTheme } from '../../providers/ThemeProvider';
+import type { TransactionFilter } from '../../services/db/transactions';
 import { useAppStore } from '../../store/useAppStore';
 import { radius, spacing } from '../../theme';
 import { groupByDay } from '../../utils/formatters';
 import { formatBaht } from '../../utils/money';
+
+/** Rows shown per day before the "more" row; a long Saturday should not bury the week. */
+const DAY_LIMIT = 4;
+
+const ALL_CHIP = 'all';
 
 export default function TransactionsScreen() {
   const db = useSQLiteContext();
@@ -19,14 +36,18 @@ export default function TransactionsScreen() {
   const { palette } = useTheme();
   const styles = useStyles();
   const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [queryText, setQueryText] = useState('');
+  const [chipKey, setChipKey] = useState(ALL_CHIP);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const accounts = useAppStore((s) => s.accounts);
   const transactions = useAppStore((s) => s.transactions);
   const hasMore = useAppStore((s) => s.hasMore);
   const refreshAll = useAppStore((s) => s.refreshAll);
   const loadMoreTransactions = useAppStore((s) => s.loadMoreTransactions);
+  const setLedgerFilter = useAppStore((s) => s.setLedgerFilter);
   const confirmDelete = useDeleteTransaction(db);
-  const [loadingMore, setLoadingMore] = useState(false);
 
   const reload = useCallback(async () => {
     try {
@@ -48,14 +69,83 @@ export default function TransactionsScreen() {
     setRefreshing(false);
   }
 
+  const activeAccounts = useMemo(
+    () => accounts.filter((account) => account.is_active === 1),
+    [accounts]
+  );
+
+  /** Filters live in SQL: the ledger only holds the pages fetched so far. */
+  const applyFilter = useCallback(
+    async (nextChip: string, nextQuery: string) => {
+      const filter: TransactionFilter = {};
+      if (nextChip.startsWith('acct:')) filter.accountId = nextChip.slice('acct:'.length);
+      else if (nextChip.startsWith('cat:')) filter.category = nextChip.slice('cat:'.length);
+      const query = nextQuery.trim();
+      if (query) filter.query = query;
+      try {
+        await setLedgerFilter(db, filter);
+      } catch (error) {
+        showToast(error instanceof Error ? error.message : 'กรองรายการไม่สำเร็จ', 'error');
+      }
+    },
+    [db, setLedgerFilter, showToast]
+  );
+
+  // One debounced query for both controls: typing and chip taps take the same path.
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      applyFilter(chipKey, queryText);
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [applyFilter, chipKey, queryText]);
+
+  function clearFilters() {
+    setQueryText('');
+    setChipKey(ALL_CHIP);
+  }
+
+  const chips = useMemo(
+    () => [
+      { key: ALL_CHIP, label: 'ทั้งหมด' },
+      ...activeAccounts.map((account) => ({ key: `acct:${account.id}`, label: account.name })),
+      ...EXPENSE_CATEGORIES.map((category) => ({ key: `cat:${category}`, label: category })),
+    ],
+    [activeAccounts]
+  );
+
+  const filterActive = chipKey !== ALL_CHIP || queryText.trim().length > 0;
   const nameOf = useCallback(
     (id: string) => accounts.find((account) => account.id === id)?.name ?? 'ไม่พบบัญชี',
     [accounts]
   );
-  const sections = useMemo(() => groupByDay(transactions), [transactions]);
 
-  // The ledger only holds the pages fetched so far; appending one page at a time keeps the
-  // first paint fast even after a year of entries.
+  // Day sections keep their own totals from the full day, even when only four rows are shown.
+  const sections = useMemo(() => {
+    return groupByDay(transactions).map((section) => {
+      const rows = expanded[section.key] ? section.data : section.data.slice(0, DAY_LIMIT);
+      const totals = section.data.reduce(
+        (sum, item) => {
+          if (item.type === 'INCOME') sum.income += item.amount_satang;
+          if (item.type === 'EXPENSE') sum.expense += item.amount_satang;
+          return sum;
+        },
+        { income: 0, expense: 0 }
+      );
+      const rest = section.data.slice(rows.length);
+      const restExpense = rest
+        .filter((item) => item.type === 'EXPENSE')
+        .reduce((sum, item) => sum + item.amount_satang, 0);
+      return {
+        ...section,
+        data: rows,
+        income: totals.income,
+        expense: totals.expense,
+        hiddenCount: rest.length,
+        restExpense,
+      };
+    });
+  }, [transactions, expanded]);
+
   async function onEndReached() {
     if (!hasMore || loadingMore) return;
     setLoadingMore(true);
@@ -71,11 +161,57 @@ export default function TransactionsScreen() {
   return (
     <Screen padded={false}>
       <View style={styles.header}>
-        <Text style={styles.title}>รายการทั้งหมด</Text>
+        <Text style={styles.title}>รายการ</Text>
         <Text style={styles.subtitle}>
-          {transactions.length} รายการล่าสุด{hasMore ? ' · เลื่อนลงเพื่อดูเพิ่ม' : ''}
+          {transactions.length}
+          {hasMore ? '+' : ''} รายการ · {activeAccounts.length} บัญชี
+          {filterActive ? ' · กำลังกรอง' : ''}
         </Text>
       </View>
+
+      <View style={styles.searchRow}>
+        <View style={styles.searchBox}>
+          <Ionicons name="search" size={16} color={palette.muted} />
+          <TextInput
+            value={queryText}
+            onChangeText={setQueryText}
+            placeholder="ค้นหารายการ หมวด หรือบัญชี..."
+            placeholderTextColor={palette.muted}
+            selectionColor={palette.primaryText}
+            autoCorrect={false}
+            autoCapitalize="none"
+            returnKeyType="search"
+            accessibilityLabel="ค้นหารายการ"
+            style={styles.searchInput}
+          />
+          {queryText.length > 0 ? (
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel="ล้างคำค้น"
+              onPress={() => setQueryText('')}
+              style={styles.clearIcon}
+            >
+              <Ionicons name="close-circle" size={16} color={palette.muted} />
+            </PressableScale>
+          ) : null}
+        </View>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chips}
+        style={styles.chipsRow}
+      >
+        {chips.map((chip) => (
+          <Chip
+            key={chip.key}
+            label={chip.label}
+            selected={chip.key === chipKey}
+            onPress={() => setChipKey(chip.key)}
+          />
+        ))}
+      </ScrollView>
 
       <SectionList
         sections={sections}
@@ -93,27 +229,38 @@ export default function TransactionsScreen() {
         }
         onEndReached={onEndReached}
         onEndReachedThreshold={0.4}
-        renderSectionHeader={({ section }) => {
-          const income = section.data
-            .filter((item) => item.type === 'INCOME')
-            .reduce((sum, item) => sum + item.amount_satang, 0);
-          const expense = section.data
-            .filter((item) => item.type === 'EXPENSE')
-            .reduce((sum, item) => sum + item.amount_satang, 0);
-          return (
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>{section.title}</Text>
-              <Text style={styles.sectionSums}>
-                รับ {formatBaht(income)} · จ่าย {formatBaht(expense)}
+        renderSectionHeader={({ section }) => (
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>{section.title}</Text>
+            <Text style={styles.sectionSums}>
+              จ่าย {formatBaht(section.expense)} · รับ {formatBaht(section.income)}
+            </Text>
+          </View>
+        )}
+        renderSectionFooter={({ section }) =>
+          section.hiddenCount > 0 ? (
+            <PressableScale
+              accessibilityRole="button"
+              accessibilityLabel={`แสดงรายการเพิ่มอีก ${section.hiddenCount} รายการของวันนี้`}
+              onPress={() =>
+                setExpanded((current) => ({ ...current, [section.key]: true }))
+              }
+              style={styles.moreRow}
+            >
+              <Text style={styles.moreText}>
+                <Text style={styles.moreStrong}>อีก {section.hiddenCount} รายการ</Text> · แตะเพื่อขยาย
               </Text>
-            </View>
-          );
-        }}
+              <Text style={styles.moreAmount}>{formatBaht(section.restExpense)}</Text>
+            </PressableScale>
+          ) : null
+        }
         renderItem={({ item }) => (
           <TransactionItem
             transaction={item}
             accountLabel={nameOf(item.account_id)}
-            destinationLabel={item.destination_account_id ? nameOf(item.destination_account_id) : undefined}
+            destinationLabel={
+              item.destination_account_id ? nameOf(item.destination_account_id) : undefined
+            }
             onLongPress={() => confirmDelete(item)}
           />
         )}
@@ -126,40 +273,77 @@ export default function TransactionsScreen() {
         }
         ListEmptyComponent={
           <View style={styles.empty}>
-            <Text style={styles.emptyTitle}>ยังไม่มีรายการ</Text>
-            <Text style={styles.subtitle}>กดปุ่ม + เพื่อบันทึกรายการแรก</Text>
+            <Text style={styles.emptyTitle}>
+              {filterActive ? 'ไม่พบรายการที่ตรงกับตัวกรอง' : 'ยังไม่มีรายการ'}
+            </Text>
+            <Text style={styles.subtitle}>
+              {filterActive ? 'ลองล้างคำค้นหรือเลือก “ทั้งหมด”' : 'กดปุ่ม + เพื่อบันทึกรายการแรก'}
+            </Text>
+            {filterActive ? (
+              <PressableScale onPress={clearFilters} style={styles.clearButton}>
+                <Text style={styles.clearLabel}>ล้างตัวกรอง</Text>
+              </PressableScale>
+            ) : null}
           </View>
         }
       />
-
-      <PressableScale
-        accessibilityLabel="บันทึกรายการใหม่"
-        onPress={() => router.push('/add')}
-        toScale={0.94}
-        style={styles.fab}
-      >
-        <Text style={styles.fabLabel}>+</Text>
-      </PressableScale>
     </Screen>
   );
 }
 
 const useStyles = makeStyles((palette) => ({
-  header: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm, gap: 2 },
-  title: { fontSize: 25, fontWeight: '700' as const, letterSpacing: -0.3, color: palette.text },
+  header: {
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.sm,
+    gap: 3,
+  },
+  title: { fontSize: 25, fontWeight: '700' as const, letterSpacing: -0.4, color: palette.text },
   subtitle: { fontSize: 12, color: palette.muted },
-  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl * 2, gap: spacing.sm },
+  searchRow: { paddingHorizontal: spacing.lg },
+  searchBox: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: 9,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    borderRadius: 13,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  searchInput: { flex: 1, minWidth: 0, padding: 0, fontSize: 13, color: palette.text },
+  clearIcon: { padding: 2 },
+  chipsRow: { maxHeight: 52, marginTop: spacing.xs },
+  chips: { gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm },
+  // 96pt clears the floating tab bar so the last row is never hidden behind the centre button.
+  content: { paddingHorizontal: spacing.lg, paddingBottom: 96, gap: spacing.sm },
   sectionHeader: {
     flexDirection: 'row' as const,
     alignItems: 'baseline' as const,
     justifyContent: 'space-between' as const,
     gap: spacing.sm,
-    paddingTop: spacing.lg,
+    paddingTop: spacing.md,
     paddingBottom: spacing.xs,
   },
   sectionTitle: { fontSize: 12, fontWeight: '700' as const, color: palette.muted },
-  sectionSums: {
-    fontSize: 11,
+  sectionSums: { fontSize: 11, color: palette.muted, fontVariant: ['tabular-nums'] as const },
+  moreRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderStyle: 'dashed' as const,
+    borderColor: palette.border,
+    backgroundColor: palette.surfaceMuted,
+  },
+  moreText: { flex: 1, fontSize: 12, color: palette.muted },
+  moreStrong: { color: palette.text, fontWeight: '700' as const },
+  moreAmount: {
+    fontSize: 12,
     color: palette.muted,
     fontVariant: ['tabular-nums'] as const,
   },
@@ -172,17 +356,13 @@ const useStyles = makeStyles((palette) => ({
   },
   empty: { alignItems: 'center' as const, paddingTop: spacing.xxl, gap: spacing.xs },
   emptyTitle: { fontSize: 16, fontWeight: '700' as const, color: palette.text },
-  fab: {
-    position: 'absolute' as const,
-    right: spacing.xl,
-    bottom: spacing.xl,
-    width: 56,
-    height: 56,
+  clearButton: {
+    marginTop: spacing.sm,
+    paddingVertical: 9,
+    paddingHorizontal: 16,
     borderRadius: radius.pill,
-    backgroundColor: palette.primary,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-    elevation: 4,
+    borderWidth: 1,
+    borderColor: palette.borderStrong,
   },
-  fabLabel: { color: palette.onPrimary, fontSize: 28, fontWeight: '600' as const, marginTop: -2 },
+  clearLabel: { fontSize: 13, fontWeight: '600' as const, color: palette.text },
 }));

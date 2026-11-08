@@ -1,5 +1,6 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Tabs } from 'expo-router';
+import { AppTabBar } from '../../components/nav/AppTabBar';
 import { useTheme } from '../../providers/ThemeProvider';
 
 /** The tab bar can hand back a non-string colour; the icon font needs a concrete one. */
@@ -11,6 +12,8 @@ export default function TabsLayout() {
   const { palette } = useTheme();
   return (
     <Tabs
+      // One bar for all tabs: four tabs plus the raised "+" in the centre.
+      tabBar={(props) => <AppTabBar {...props} />}
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: palette.primaryText,

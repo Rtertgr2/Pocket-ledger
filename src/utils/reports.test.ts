@@ -83,6 +83,7 @@ function transaction(partial: Partial<Transaction>): Transaction {
     is_excluded_from_average: 0,
     transaction_date: now.toISOString(),
     created_at: now.toISOString(),
+    updated_at: now.toISOString(),
     ...partial,
   };
 }

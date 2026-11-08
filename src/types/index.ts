@@ -30,6 +30,8 @@ export interface Transaction {
   is_excluded_from_average: number;
   transaction_date: string;
   created_at: string;
+  /** Mirrors `created_at` until the row is edited, then the write time of the last edit (schema v3). */
+  updated_at: string | null;
 }
 
 export interface CreateAccountDTO {

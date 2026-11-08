@@ -17,14 +17,16 @@ interface TransactionItemProps {
   /** Resolved by the caller so the row never queries the database. */
   accountLabel: string;
   destinationLabel?: string;
+  onPress?: () => void;
   onLongPress?: () => void;
 }
 
-/** A row of the mockup's ledger: tinted icon chip, two lines of text, signed amount on the right. */
+/** A row of the ledger: round tinted icon, two lines of text, signed amount on the right. */
 export function TransactionItem({
   transaction,
   accountLabel,
   destinationLabel,
+  onPress,
   onLongPress,
 }: TransactionItemProps) {
   const styles = useStyles();
@@ -37,13 +39,14 @@ export function TransactionItem({
   const subtitle =
     transaction.type === 'TRANSFER'
       ? `${accountLabel} → ${destinationLabel ?? '?'}`
-      : [accountLabel, transaction.category, formatTime(transaction.transaction_date)]
+      : [transaction.category ?? 'ไม่ระบุหมวด', accountLabel, formatTime(transaction.transaction_date)]
           .filter(Boolean)
           .join(' · ');
 
   return (
     <PressableScale
-      disabled={!onLongPress}
+      disabled={!onPress && !onLongPress}
+      onPress={onPress}
       onLongPress={onLongPress}
       delayLongPress={400}
       accessibilityLabel={`${transactionTitle(transaction)} ${formatBaht(transaction.amount_satang)}`}
@@ -51,7 +54,7 @@ export function TransactionItem({
       style={styles.card}
     >
       <View style={[styles.iconChip, { backgroundColor: chipBackground }]}>
-        <Ionicons name={TYPE_ICON[transaction.type]} size={20} color={accent} />
+        <Ionicons name={TYPE_ICON[transaction.type]} size={18} color={accent} />
       </View>
       <View style={styles.texts}>
         <Text style={styles.title} numberOfLines={1}>
@@ -83,19 +86,21 @@ const useStyles = makeStyles((palette) => ({
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: palette.border,
-    padding: spacing.md,
+    paddingVertical: spacing.md,
+    paddingHorizontal: 14,
     ...cardShadow,
   },
   iconChip: {
     width: 40,
     height: 40,
-    borderRadius: radius.sm,
+    borderRadius: radius.pill,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
+    flex: 0,
   },
-  texts: { flex: 1, gap: 2, minWidth: 0 },
+  texts: { flex: 1, gap: 3, minWidth: 0 },
   title: { fontSize: 14, fontWeight: '600' as const, color: palette.text },
-  subtitle: { fontSize: 12, color: palette.muted },
+  subtitle: { fontSize: 11, color: palette.muted },
   amounts: { alignItems: 'flex-end' as const, gap: 2 },
   amount: { fontSize: 15, fontWeight: '700' as const, fontVariant: ['tabular-nums'] as const },
   flag: { fontSize: 10, color: palette.muted },

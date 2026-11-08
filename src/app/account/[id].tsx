@@ -1,20 +1,22 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
+import { ColorSwatchPicker } from '../../components/common/ColorSwatchPicker';
 import { FormScreen } from '../../components/common/FormScreen';
 import { TextField } from '../../components/common/TextField';
 import { useToast } from '../../components/common/Toast';
-import { makeStyles } from '../../providers/ThemeProvider';
+import { makeStyles, useTheme } from '../../providers/ThemeProvider';
 import { useAppStore } from '../../store/useAppStore';
-import { ACCOUNT_COLORS, spacing } from '../../theme';
+import { ACCOUNT_COLORS, radius, readableTextOn, spacing } from '../../theme';
 import { formatBaht } from '../../utils/money';
 
 export default function EditAccountScreen() {
   const db = useSQLiteContext();
   const { showToast } = useToast();
+  const { palette } = useTheme();
   const styles = useStyles();
   const params = useLocalSearchParams<{ id?: string }>();
 
@@ -55,34 +57,45 @@ export default function EditAccountScreen() {
   }
 
   return (
-    <FormScreen footer={<Button label={saving ? 'กำลังบันทึก…' : 'บันทึก'} onPress={() => save(account.is_active)} disabled={saving} />}>
+    <FormScreen
+      footer={
+        <Button
+          label={saving ? 'กำลังบันทึก…' : 'บันทึก'}
+          onPress={() => save(account.is_active)}
+          disabled={saving}
+        />
+      }
+    >
       <Card style={styles.summary}>
+        <View style={styles.summaryTop}>
+          <View style={[styles.badge, { backgroundColor: account.color_hex }]}>
+            <Text style={[styles.badgeText, { color: readableTextOn(account.color_hex) }]}>
+              {account.name.slice(0, 1).toUpperCase()}
+            </Text>
+          </View>
+          <View
+            style={[
+              styles.statusPill,
+              { backgroundColor: isActive ? palette.incomeSoft : palette.tile },
+            ]}
+          >
+            <Text
+              style={[styles.statusText, { color: isActive ? palette.income : palette.muted }]}
+            >
+              {isActive ? 'ใช้งานอยู่' : 'ปิดใช้งานอยู่'}
+            </Text>
+          </View>
+        </View>
+        <Text style={styles.balanceLabel}>ยอดคงเหลือ</Text>
         <Text style={styles.balance}>{formatBaht(account.balance_satang)}</Text>
-        <Text style={styles.hint}>
-          {isActive ? 'ใช้งานอยู่' : 'ปิดใช้งานอยู่'} · ยอดนี้คำนวณจากรายการทั้งหมดของบัญชี
-        </Text>
+        <Text style={styles.hint}>ยอดนี้คำนวณจากรายการทั้งหมดของบัญชี</Text>
       </Card>
 
       <TextField label="ชื่อบัญชี" value={name} onChangeText={setName} maxLength={40} />
 
-      <View style={styles.colors}>
+      <View style={styles.field}>
         <Text style={styles.label}>สีการ์ด</Text>
-        <View style={styles.swatches}>
-          {ACCOUNT_COLORS.map((option) => (
-            <Pressable
-              key={option}
-              accessibilityRole="radio"
-              accessibilityLabel={`สี ${option}`}
-              accessibilityState={{ selected: option === color }}
-              onPress={() => setColor(option)}
-              style={[
-                styles.swatch,
-                { backgroundColor: option },
-                option === color ? styles.swatchSelected : null,
-              ]}
-            />
-          ))}
-        </View>
+        <ColorSwatchPicker value={color} onChange={setColor} />
       </View>
 
       <Button
@@ -100,16 +113,35 @@ export default function EditAccountScreen() {
 
 const useStyles = makeStyles((palette) => ({
   summary: { gap: spacing.xs },
+  summaryTop: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    justifyContent: 'space-between' as const,
+    marginBottom: spacing.sm,
+  },
+  badge: {
+    width: 34,
+    height: 34,
+    borderRadius: radius.sm,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
+  badgeText: { fontSize: 15, fontWeight: '800' as const },
+  statusPill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radius.pill,
+  },
+  statusText: { fontSize: 11, fontWeight: '700' as const },
+  balanceLabel: { fontSize: 12, color: palette.muted },
   balance: {
-    fontSize: 26,
+    fontSize: 30,
     fontWeight: '800' as const,
+    letterSpacing: -0.6,
     color: palette.text,
     fontVariant: ['tabular-nums'] as const,
   },
-  label: { fontSize: 13, fontWeight: '600' as const, color: palette.muted },
-  colors: { gap: spacing.sm },
-  swatches: { flexDirection: 'row' as const, gap: spacing.sm },
-  swatch: { width: 34, height: 34, borderRadius: 17, borderWidth: 3, borderColor: 'transparent' },
-  swatchSelected: { borderColor: palette.text },
+  field: { gap: spacing.sm },
+  label: { fontSize: 12, fontWeight: '600' as const, color: palette.muted },
   hint: { fontSize: 12, color: palette.muted },
 }));

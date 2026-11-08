@@ -1,3 +1,4 @@
+import Ionicons from '@expo/vector-icons/Ionicons';
 import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
@@ -5,21 +6,26 @@ import { RefreshControl, ScrollView, Text, View } from 'react-native';
 import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
 import { Entrance } from '../../components/common/Entrance';
+import { PressableScale } from '../../components/common/PressableScale';
 import { Screen } from '../../components/common/Screen';
+import { SectionHead } from '../../components/common/SectionHead';
 import { useToast } from '../../components/common/Toast';
-import { AccountCard } from '../../components/dashboard/AccountCard';
-import { BurnRateCard } from '../../components/dashboard/BurnRateCard';
-import { TodayPills } from '../../components/dashboard/TodayPills';
-import { TotalBalanceCard } from '../../components/dashboard/TotalBalanceCard';
+import { AccountRow } from '../../components/overview/AccountRow';
+import { CategoryRingCard } from '../../components/overview/CategoryRingCard';
+import { SummaryCard } from '../../components/overview/SummaryCard';
 import { TransactionItem } from '../../components/transactions/TransactionItem';
 import { useDeleteTransaction } from '../../hooks/useDeleteTransaction';
 import { makeStyles, useTheme } from '../../providers/ThemeProvider';
+import { listExpensesInRange } from '../../services/db/transactions';
 import { useAppStore } from '../../store/useAppStore';
-import { spacing } from '../../theme';
-import type { Transaction } from '../../types';
-import { todayExpenseTotals } from '../../utils/reports';
+import { radius, spacing } from '../../theme';
+import type { ReportExpense, Transaction } from '../../types';
+import { monthRange } from '../../utils/calculations';
+import { formatMonthLabel } from '../../utils/formatters';
+import { formatBaht } from '../../utils/money';
+import { categoryTotals } from '../../utils/reports';
 
-const RECENT_LIMIT = 5;
+const RECENT_LIMIT = 3;
 
 export default function DashboardScreen() {
   const db = useSQLiteContext();
@@ -27,11 +33,12 @@ export default function DashboardScreen() {
   const { palette } = useTheme();
   const styles = useStyles();
   const [refreshing, setRefreshing] = useState(false);
+  const [monthExpenses, setMonthExpenses] = useState<ReportExpense[]>([]);
 
   const accounts = useAppStore((s) => s.accounts);
   const totalSatang = useAppStore((s) => s.totalSatang);
-  const burnRateSatang = useAppStore((s) => s.burnRateSatang);
   const monthExpenseSatang = useAppStore((s) => s.monthExpenseSatang);
+  const monthIncomeSatang = useAppStore((s) => s.monthIncomeSatang);
   const transactions = useAppStore((s) => s.transactions);
   const refreshAll = useAppStore((s) => s.refreshAll);
   const confirmDelete = useDeleteTransaction(db);
@@ -39,6 +46,9 @@ export default function DashboardScreen() {
   const reload = useCallback(async () => {
     try {
       await refreshAll(db);
+      const now = new Date();
+      const { startIso, endIso } = monthRange(now.getFullYear(), now.getMonth());
+      setMonthExpenses(await listExpensesInRange(db, startIso, endIso));
     } catch (error) {
       showToast(error instanceof Error ? error.message : 'โหลดข้อมูลไม่สำเร็จ', 'error');
     }
@@ -56,13 +66,18 @@ export default function DashboardScreen() {
     setRefreshing(false);
   }
 
-  // Same eligibility as the reports, so the ring never disagrees with the burn rate.
-  const todayTotals = useMemo(() => todayExpenseTotals(transactions), [transactions]);
+  // The ring reads the same eligible-expense query the report uses, so the two cannot disagree.
+  const categories = useMemo(() => categoryTotals(monthExpenses), [monthExpenses]);
+  const monthTotalSatang = useMemo(
+    () => categories.reduce((sum, entry) => sum + entry.satang, 0),
+    [categories]
+  );
 
   const activeAccounts = accounts.filter((account) => account.is_active === 1);
   const recent = transactions.slice(0, RECENT_LIMIT);
   const nameOf = (id: string) => accounts.find((account) => account.id === id)?.name ?? 'ไม่พบบัญชี';
   const openAdd = (accountId?: string) => router.push({ pathname: '/add', params: { accountId } });
+  const monthLabel = formatMonthLabel(new Date());
 
   return (
     <Screen padded={false}>
@@ -79,42 +94,52 @@ export default function DashboardScreen() {
         }
       >
         <View style={styles.header}>
-          <Text style={styles.title}>Pocket Ledger</Text>
-          <Text style={styles.subtitle}>บันทึกรายรับ–รายจ่ายในเครื่องคุณ</Text>
+          <View style={styles.headerTexts}>
+            <Text style={styles.title}>Pocket Ledger</Text>
+            <Text style={styles.subtitle}>{monthLabel}</Text>
+          </View>
+          <PressableScale
+            accessibilityRole="button"
+            accessibilityLabel="ตั้งค่า"
+            onPress={() => router.push('/settings')}
+            style={styles.iconButton}
+          >
+            <Ionicons name="settings-outline" size={18} color={palette.muted} />
+          </PressableScale>
         </View>
 
         <Entrance>
-          <TotalBalanceCard
+          <SummaryCard
             totalSatang={totalSatang}
             accountCount={activeAccounts.length}
-            todayTotals={todayTotals}
+            incomeSatang={monthIncomeSatang}
+            expenseSatang={monthExpenseSatang}
           />
         </Entrance>
+
         <Entrance delayMs={60}>
-          <TodayPills totals={todayTotals} />
-        </Entrance>
-        <Entrance delayMs={120}>
-          <BurnRateCard burnRateSatang={burnRateSatang} monthExpenseSatang={monthExpenseSatang} />
+          <SectionHead title="รายจ่ายตามหมวด" hint={`เดือนนี้ ${formatBaht(monthTotalSatang)}`} />
+          <CategoryRingCard totals={categories} monthTotalSatang={monthTotalSatang} />
         </Entrance>
 
         {activeAccounts.length === 0 ? (
-          <Card style={styles.empty}>
-            <Text style={styles.emptyTitle}>สร้างบัญชีแรกของคุณ</Text>
-            <Text style={styles.emptyBody}>
-              เริ่มจากกระเป๋าเงินสดหรือบัญชีธนาคาร แล้วบันทึกรายการได้ทันที
-            </Text>
-            <Button label="เพิ่มบัญชี" onPress={() => router.push('/account/new')} />
-          </Card>
+          <>
+            <SectionHead title="บัญชีของฉัน" hint="ยังไม่มีบัญชี" />
+            <Card style={styles.empty}>
+              <Text style={styles.emptyTitle}>สร้างบัญชีแรกของคุณ</Text>
+              <Text style={styles.emptyBody}>
+                เริ่มจากกระเป๋าเงินสดหรือบัญชีธนาคาร แล้วบันทึกรายการได้ทันที
+              </Text>
+              <Button label="เพิ่มบัญชี" onPress={() => router.push('/account/new')} />
+            </Card>
+          </>
         ) : (
           <>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>บัญชีของฉัน</Text>
-              <Text style={styles.sectionHint}>แตะเพื่อบันทึก · กดค้างเพื่อปรับยอด</Text>
-            </View>
-            <View style={styles.chips}>
-              {activeAccounts.map((account) => (
-                <Entrance key={account.id} delayMs={140}>
-                  <AccountCard
+            <SectionHead title="บัญชีของฉัน" hint="แตะเพื่อบันทึก · กดค้างเพื่อปรับยอด" />
+            <Card style={styles.accountsCard}>
+              {activeAccounts.map((account, index) => (
+                <Entrance key={account.id} delayMs={100 + index * 40}>
+                  <AccountRow
                     account={account}
                     onPress={() => openAdd(account.id)}
                     onLongPress={() =>
@@ -123,39 +148,47 @@ export default function DashboardScreen() {
                   />
                 </Entrance>
               ))}
-            </View>
+            </Card>
             <View style={styles.actions}>
-              <Button label="โอนเงิน" variant="secondary" onPress={() => router.push('/transfer')} style={styles.action} />
-              <Button label="ปรับยอด" variant="secondary" onPress={() => router.push('/reconcile')} style={styles.action} />
+              <Button
+                label="โอนเงิน"
+                variant="secondary"
+                onPress={() => router.push('/transfer')}
+                style={styles.action}
+              />
+              <Button
+                label="ปรับยอด"
+                variant="secondary"
+                onPress={() => router.push('/reconcile')}
+                style={styles.action}
+              />
             </View>
           </>
         )}
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>รายการล่าสุด</Text>
-          {transactions.length > RECENT_LIMIT ? (
-            <Text
-              style={styles.link}
-              accessibilityRole="link"
-              onPress={() => router.push('/transactions')}
-            >
-              ดูทั้งหมด
+        <SectionHead
+          title="รายการล่าสุด"
+          action={
+            <Text style={styles.link} accessibilityRole="link" onPress={() => router.push('/transactions')}>
+              แสดงทั้งหมด
             </Text>
-          ) : null}
-        </View>
+          }
+        />
         {recent.length === 0 ? (
           <Card style={styles.empty}>
-            <Text style={styles.emptyBody}>ยังไม่มีรายการ — แตะที่บัญชีเพื่อเริ่มบันทึก</Text>
+            <Text style={styles.emptyBody}>ยังไม่มีรายการ — กดปุ่ม + เพื่อเริ่มบันทึก</Text>
           </Card>
         ) : (
           <View style={styles.recentList}>
             {recent.map((transaction: Transaction, index) => (
-              <Entrance key={transaction.id} delayMs={180 + Math.min(index, 4) * 50}>
+              <Entrance key={transaction.id} delayMs={160 + index * 50}>
                 <TransactionItem
                   transaction={transaction}
                   accountLabel={nameOf(transaction.account_id)}
                   destinationLabel={
-                    transaction.destination_account_id ? nameOf(transaction.destination_account_id) : undefined
+                    transaction.destination_account_id
+                      ? nameOf(transaction.destination_account_id)
+                      : undefined
                   }
                   onLongPress={() => confirmDelete(transaction)}
                 />
@@ -169,22 +202,32 @@ export default function DashboardScreen() {
 }
 
 const useStyles = makeStyles((palette) => ({
-  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md },
-  header: { paddingTop: spacing.md, paddingBottom: spacing.xs, gap: 2 },
-  title: { fontSize: 25, fontWeight: '700' as const, letterSpacing: -0.3, color: palette.text },
-  subtitle: { fontSize: 13, color: palette.muted },
-  sectionHeader: {
+  // 96pt clears the floating tab bar so the last card is never hidden behind the centre button.
+  content: { paddingHorizontal: spacing.lg, paddingBottom: 96, gap: spacing.sm },
+  header: {
     flexDirection: 'row' as const,
-    alignItems: 'baseline' as const,
+    alignItems: 'center' as const,
     justifyContent: 'space-between' as const,
-    gap: spacing.sm,
-    marginTop: spacing.sm,
+    gap: spacing.md,
+    paddingTop: spacing.sm,
+    paddingBottom: spacing.sm,
   },
-  sectionTitle: { fontSize: 16, fontWeight: '700' as const, letterSpacing: -0.1, color: palette.text },
-  sectionHint: { fontSize: 11, color: palette.muted, textAlign: 'right' as const },
+  headerTexts: { gap: 3, flex: 1, minWidth: 0 },
+  title: { fontSize: 25, fontWeight: '700' as const, letterSpacing: -0.4, color: palette.text },
+  subtitle: { fontSize: 13, color: palette.muted },
+  iconButton: {
+    width: 38,
+    height: 38,
+    borderRadius: radius.pill,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.surface,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
   link: { fontSize: 13, fontWeight: '600' as const, color: palette.primaryText },
-  chips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: spacing.sm },
-  actions: { flexDirection: 'row' as const, gap: spacing.md },
+  accountsCard: { gap: spacing.sm },
+  actions: { flexDirection: 'row' as const, gap: spacing.sm },
   action: { flex: 1 },
   empty: { gap: spacing.sm },
   emptyTitle: { fontSize: 16, fontWeight: '700' as const, color: palette.text },

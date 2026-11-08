@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DDL } from '../src/services/db/schema.ts';
+import { DDL, MIGRATIONS, POST_MIGRATION_DDL, SCHEMA_VERSION } from '../src/services/db/schema.ts';
 import { formatSatang, parseAmountToSatang } from '../src/utils/money.ts';
 
 const dir = mkdtempSync(join(tmpdir(), 'phase1-'));
@@ -43,9 +43,19 @@ function mustFail(sql) {
 }
 
 try {
+  // Fresh install: DDL, no migrations, then the post-migration index statements (initDatabase's order).
   execFileSync('sqlite3', ['-bail', dbFile], {
-    input: PRAGMAS + DDL.map((s) => `${s};`).join('\n') + SEED,
+    input:
+      PRAGMAS +
+      [...DDL, ...POST_MIGRATION_DDL].map((s) => `${s};`).join('\n') +
+      SEED,
   });
+
+  assert.equal(
+    query("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='index' AND name='idx_transactions_category'")[0].n,
+    1,
+    'a fresh install gets the category index'
+  );
 
   // Balances are derived from transactions, in integer satang.
   assert.deepEqual(
@@ -136,7 +146,113 @@ try {
   assert.equal(query('SELECT COUNT(*) AS n FROM transactions')[0].n, 0, 'clearLedger empties transactions');
   assert.equal(query('SELECT COUNT(*) AS n FROM accounts')[0].n, 0, 'clearLedger empties accounts');
 
-  console.log('Phase 1 check passed: schema, constraints, derived balances, transfer exclusion, ledger wipe, money parsing.');
+  // Migration v2 -> v3: the path an installed 1.0.x device takes on first launch after update.
+  // The old database is built from today's DDL with what v3 added removed, so the test cannot drift.
+  const migrateFile = join(dir, 'migrate.db');
+  const migrate = (sql) =>
+    execFileSync('sqlite3', ['-json', '-bail', migrateFile], {
+      input: PRAGMAS + sql,
+      encoding: 'utf8',
+    });
+  const migrateRows = (sql) => JSON.parse(migrate(sql) || '[]');
+
+  migrate(
+    DDL.map((s) => `${s};`).join('\n') +
+      `
+      ALTER TABLE transactions DROP COLUMN updated_at;
+      PRAGMA user_version = 2;
+      INSERT INTO accounts (id, name, initial_balance_satang) VALUES ('old', 'เดิม', 10000);
+      INSERT INTO transactions (id, account_id, type, amount_satang, transaction_date, created_at)
+        VALUES ('oldt', 'old', 'EXPENSE', 2500, '2026-10-29T10:00:00Z', '2026-10-29 03:00:00');
+      `
+  );
+
+  migrate(
+    [...(MIGRATIONS[3] ?? []), ...POST_MIGRATION_DDL].map((s) => `${s};`).join('\n') +
+      `\nPRAGMA user_version = ${SCHEMA_VERSION};`
+  );
+
+  const columns = migrateRows("SELECT name FROM pragma_table_info('transactions')").map((r) => r.name);
+  assert.ok(columns.includes('updated_at'), 'migration adds transactions.updated_at');
+  assert.deepEqual(
+    migrateRows("SELECT created_at, updated_at FROM transactions WHERE id = 'oldt'")[0],
+    { created_at: '2026-10-29 03:00:00', updated_at: '2026-10-29 03:00:00' },
+    'existing rows keep their data and are backfilled from created_at'
+  );
+  assert.equal(
+    migrateRows("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='index' AND name='idx_transactions_category'")[0].n,
+    1,
+    'migration creates the category index'
+  );
+  assert.equal(migrateRows('PRAGMA user_version')[0].user_version, SCHEMA_VERSION);
+  assert.equal(
+    migrateRows('SELECT COUNT(*) AS n FROM transactions')[0].n,
+    1,
+    'migration must not lose existing rows'
+  );
+
+  // The edit path (updateTransactionById's statement): updated_at moves, created_at stays,
+  // and the derived balance follows the new amount without any extra bookkeeping.
+  migrate(`UPDATE transactions
+             SET amount_satang = 3000, updated_at = CURRENT_TIMESTAMP
+           WHERE id = 'oldt'`);
+  const edited = migrateRows(
+    "SELECT created_at, updated_at, amount_satang FROM transactions WHERE id = 'oldt'"
+  )[0];
+  assert.equal(edited.created_at, '2026-10-29 03:00:00', 'an edit must not touch created_at');
+  assert.ok(edited.updated_at > '2026-10-29 03:00:00', 'an edit must move updated_at');
+  assert.equal(edited.amount_satang, 3000);
+  assert.equal(
+    migrateRows("SELECT balance_satang AS b FROM v_account_balances WHERE id = 'old'")[0].b,
+    7000,
+    'balance follows the edited amount (10000 - 3000)'
+  );
+
+  // Upgrade straight from v1 (an install that never took 1.0.1): category arrives in v2, then
+  // updated_at in v3. This is the path that breaks if an index on a migrated column lives in DDL.
+  const v1File = join(dir, 'migrate-v1.db');
+  const migrateV1 = (sql) =>
+    execFileSync('sqlite3', ['-json', '-bail', v1File], {
+      input: PRAGMAS + sql,
+      encoding: 'utf8',
+    });
+  const migrateV1Rows = (sql) => JSON.parse(migrateV1(sql) || '[]');
+
+  migrateV1(
+    DDL.map((s) => `${s};`).join('\n') +
+      `
+      ALTER TABLE transactions DROP COLUMN updated_at;
+      ALTER TABLE transactions DROP COLUMN category;
+      PRAGMA user_version = 1;
+      INSERT INTO accounts (id, name, initial_balance_satang) VALUES ('old', 'เดิม', 10000);
+      INSERT INTO transactions (id, account_id, type, amount_satang, transaction_date, created_at)
+        VALUES ('oldt', 'old', 'EXPENSE', 2500, '2026-10-29T10:00:00Z', '2026-10-29 03:00:00');
+      `
+  );
+
+  migrateV1(
+    [...(MIGRATIONS[2] ?? []), ...(MIGRATIONS[3] ?? []), ...POST_MIGRATION_DDL]
+      .map((s) => `${s};`)
+      .join('\n')
+  );
+
+  const v1Columns = migrateV1Rows("SELECT name FROM pragma_table_info('transactions')").map((r) => r.name);
+  assert.ok(v1Columns.includes('category'), 'v1 -> v3 adds category');
+  assert.ok(v1Columns.includes('updated_at'), 'v1 -> v3 adds updated_at');
+  assert.equal(
+    migrateV1Rows("SELECT COUNT(*) AS n FROM sqlite_master WHERE type='index' AND name='idx_transactions_category'")[0].n,
+    1,
+    'v1 -> v3 creates the category index'
+  );
+  assert.equal(
+    migrateV1Rows('SELECT COUNT(*) AS n FROM transactions')[0].n,
+    1,
+    'v1 -> v3 must not lose existing rows'
+  );
+
+  console.log(
+    'Phase 1 check passed: schema, constraints, derived balances, transfer exclusion, ledger wipe, money parsing, v2->v3 and v1->v3 migrations.'
+  );
 } finally {
   rmSync(dir, { recursive: true, force: true });
 }

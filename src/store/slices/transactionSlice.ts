@@ -4,8 +4,10 @@ import type { StateCreator } from 'zustand';
 import {
   deleteTransactionById,
   insertTransaction,
-  listTransactions,
+  searchTransactions,
   sumExpensesInRange,
+  sumIncomeInRange,
+  type TransactionFilter,
 } from '../../services/db/transactions';
 import { clearLedger } from '../../services/db/reset';
 import { getAccountBalance } from '../../services/db/accounts';
@@ -27,6 +29,11 @@ export interface TransactionSlice {
   hasMore: boolean;
   burnRateSatang: number;
   monthExpenseSatang: number;
+  /** The month's income, so the overview chips never guess from a partial page. */
+  monthIncomeSatang: number;
+  /** What the ledger is filtering by; the screen owns the controls, the store owns the query. */
+  ledgerFilter: TransactionFilter;
+  setLedgerFilter: (db: SQLiteDatabase, filter: TransactionFilter) => Promise<void>;
   addTransaction: (db: SQLiteDatabase, dto: CreateTransactionDTO) => Promise<void>;
   transferFunds: (db: SQLiteDatabase, dto: TransferFundsDTO) => Promise<void>;
   deleteTransaction: (db: SQLiteDatabase, id: string) => Promise<void>;
@@ -54,6 +61,13 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
     hasMore: false,
     burnRateSatang: 0,
     monthExpenseSatang: 0,
+    monthIncomeSatang: 0,
+    ledgerFilter: {},
+
+    setLedgerFilter: async (db, filter) => {
+      set({ ledgerFilter: filter });
+      await get().fetchTransactions(db);
+    },
 
     addTransaction: async (db, dto) => {
       await insertTransaction(db, {
@@ -114,14 +128,14 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
 
     fetchTransactions: async (db) => {
       // One extra row tells us whether another page exists without a COUNT query.
-      const rows = await listTransactions(db, LEDGER_PAGE_SIZE + 1);
+      const rows = await searchTransactions(db, get().ledgerFilter, LEDGER_PAGE_SIZE + 1);
       set({ transactions: rows.slice(0, LEDGER_PAGE_SIZE), hasMore: rows.length > LEDGER_PAGE_SIZE });
     },
 
     loadMoreTransactions: async (db) => {
-      const { transactions, hasMore } = get();
+      const { transactions, hasMore, ledgerFilter } = get();
       if (!hasMore) return;
-      const rows = await listTransactions(db, LEDGER_PAGE_SIZE + 1, transactions.length);
+      const rows = await searchTransactions(db, ledgerFilter, LEDGER_PAGE_SIZE + 1, transactions.length);
       set({
         transactions: [...transactions, ...rows.slice(0, LEDGER_PAGE_SIZE)],
         hasMore: rows.length > LEDGER_PAGE_SIZE,
@@ -130,9 +144,13 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
 
     fetchBurnRate: async (db, now = new Date()) => {
       const { startIso, endIso } = monthRange(now.getFullYear(), now.getMonth());
-      const monthExpenseSatang = await sumExpensesInRange(db, startIso, endIso);
+      const [monthExpenseSatang, monthIncomeSatang] = await Promise.all([
+        sumExpensesInRange(db, startIso, endIso),
+        sumIncomeInRange(db, startIso, endIso),
+      ]);
       set({
         monthExpenseSatang,
+        monthIncomeSatang,
         burnRateSatang: calculateDailyBurnRate(
           monthExpenseSatang,
           daysInMonth(now.getFullYear(), now.getMonth())

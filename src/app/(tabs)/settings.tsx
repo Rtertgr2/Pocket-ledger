@@ -9,6 +9,7 @@ import { Button } from '../../components/common/Button';
 import { Card } from '../../components/common/Card';
 import { PressableScale } from '../../components/common/PressableScale';
 import { Screen } from '../../components/common/Screen';
+import { Segmented } from '../../components/common/Segmented';
 import { TextField } from '../../components/common/TextField';
 import { useToast } from '../../components/common/Toast';
 import { makeStyles, useTheme } from '../../providers/ThemeProvider';
@@ -17,7 +18,7 @@ import { countTransactions } from '../../services/db/transactions';
 import { readBackupEndpoint, readBackupSecret, writeBackupConfig, type ThemeMode } from '../../services/storage/settings';
 import { checkForUpdate as fetchLatestRelease } from '../../services/updates/feed';
 import { useAppStore } from '../../store/useAppStore';
-import { cardShadow, radius, spacing, readableTextOn } from '../../theme';
+import { radius, spacing, readableTextOn } from '../../theme';
 import { formatBaht } from '../../utils/money';
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string }[] = [
@@ -182,28 +183,12 @@ export default function SettingsScreen() {
         <Group label="การแสดงผล">
           <Card style={styles.card}>
             <BlockHead icon="color-palette-outline" title="ธีม" sub="หน้าตาของแอป" />
-            <View style={styles.segment}>
-              {THEME_OPTIONS.map((option) => {
-                const selected = option.mode === mode;
-                return (
-                  <PressableScale
-                    key={option.mode}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected }}
-                    onPress={() => setMode(option.mode)}
-                    toScale={0.97}
-                    style={[styles.segmentItem, selected ? styles.segmentSelected : null]}
-                  >
-                    <Text
-                      numberOfLines={1}
-                      style={[styles.segmentLabel, selected ? styles.segmentLabelSelected : null]}
-                    >
-                      {option.label}
-                    </Text>
-                  </PressableScale>
-                );
-              })}
-            </View>
+            <Segmented
+              options={THEME_OPTIONS.map((option) => ({ key: option.mode, label: option.label }))}
+              value={mode}
+              onChange={setMode}
+              label="ธีม"
+            />
             <Text style={styles.hint}>เลือก “ตามระบบ” เพื่อเปลี่ยนตามการตั้งค่าของมือถือ</Text>
           </Card>
         </Group>
@@ -359,7 +344,8 @@ function excerpt(text: string, limit: number): string {
 }
 
 const useStyles = makeStyles((palette) => ({
-  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.lg },
+  // 96pt clears the floating tab bar so the last card is never hidden behind the centre button.
+  content: { paddingHorizontal: spacing.lg, paddingBottom: 96, gap: spacing.lg },
   header: { paddingTop: spacing.md, gap: 2 },
   title: { fontSize: 25, fontWeight: '700' as const, letterSpacing: -0.3, color: palette.text },
   subtitle: { fontSize: 13, color: palette.muted },
@@ -403,39 +389,6 @@ const useStyles = makeStyles((palette) => ({
     color: palette.text,
     fontVariant: ['tabular-nums'] as const,
   },
-  // Track and pill: the selection reads as a raised chip on the track, not as a filled button.
-  // The inner padding and 4pt gaps keep the three labels from touching the chip edge and each
-  // other, and the 44pt height is the smallest comfortable touch target.
-  segment: {
-    flexDirection: 'row' as const,
-    backgroundColor: palette.surfaceMuted,
-    borderRadius: radius.md - 2,
-    padding: spacing.xs,
-    gap: spacing.xs,
-  },
-  segmentItem: {
-    flex: 1,
-    minHeight: 44,
-    paddingHorizontal: spacing.sm,
-    borderRadius: radius.sm,
-    alignItems: 'center' as const,
-    justifyContent: 'center' as const,
-  },
-  segmentSelected: {
-    backgroundColor: palette.surface,
-    ...cardShadow,
-    shadowOpacity: 0.12,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  segmentLabel: {
-    fontSize: 13,
-    lineHeight: 18,
-    fontWeight: '600' as const,
-    color: palette.muted,
-    textAlign: 'center' as const,
-  },
-  segmentLabelSelected: { color: palette.text },
   accountRow: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,

@@ -29,6 +29,7 @@ function transaction(partial: Partial<Transaction> = {}): Transaction {
     is_excluded_from_average: 0,
     transaction_date: '2026-10-29T03:00:00.000Z',
     created_at: '2026-10-29T03:00:00.000Z',
+    updated_at: '2026-10-29T03:00:00.000Z',
     ...partial,
   };
 }
@@ -52,6 +53,9 @@ test('parseBackup rejects files that are not ours, of another version, or unread
 
   const future = JSON.stringify({ format: 'pocket-ledger.backup', version: 99, accounts: [], transactions: [] });
   assert.match(assertRejection(parseBackup(future)), /ยังไม่รองรับ/);
+
+  const ancient = JSON.stringify({ format: 'pocket-ledger.backup', version: 0, accounts: [], transactions: [] });
+  assert.match(assertRejection(parseBackup(ancient)), /ยังไม่รองรับ/);
 
   const missingList = JSON.stringify({ format: 'pocket-ledger.backup', version: 1, accounts: [] });
   assert.match(assertRejection(parseBackup(missingList)), /ไม่ครบถ้วน/);
@@ -84,6 +88,46 @@ test('parseBackup fills optional account columns so old files still restore', ()
   if (!result.ok) return;
   assert.equal(result.backup.accounts[0].color_hex, '#2E7D32');
   assert.equal(result.backup.accounts[0].is_active, 1);
+});
+
+test('parseBackup accepts a v1 file and fills updated_at from created_at', () => {
+  // Shape of a file exported by 1.0.x: no `updated_at`, timestamps in SQLite's own format.
+  const v1 = JSON.stringify({
+    format: 'pocket-ledger.backup',
+    version: 1,
+    exportedAt: '2026-10-30T10:00:00.000Z',
+    accounts: [
+      { id: 'a9', name: 'กระเป๋า', initial_balance_satang: 0, created_at: '2026-10-01 00:00:00' },
+    ],
+    transactions: [
+      {
+        id: 't9',
+        account_id: 'a9',
+        type: 'EXPENSE',
+        amount_satang: 500,
+        transaction_date: '2026-10-29T03:00:00.000Z',
+        created_at: '2026-10-29 03:00:00',
+      },
+    ],
+  });
+
+  const result = parseBackup(v1);
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  // The backup is normalised to the current format, because that is what gets written to SQLite.
+  assert.equal(result.backup.version, 2);
+  assert.equal(result.backup.transactions[0].updated_at, '2026-10-29 03:00:00');
+  assert.equal(result.backup.accounts[0].updated_at, '2026-10-01 00:00:00');
+});
+
+test('parseBackup keeps the edit time of a row that was edited', () => {
+  const edited = transaction({ created_at: '2026-10-29 03:00:00', updated_at: '2026-10-30 09:15:00' });
+  const result = parseBackup(JSON.stringify(buildBackup([account()], [edited])));
+
+  assert.equal(result.ok, true);
+  if (!result.ok) return;
+  assert.equal(result.backup.transactions[0].created_at, '2026-10-29 03:00:00');
+  assert.equal(result.backup.transactions[0].updated_at, '2026-10-30 09:15:00');
 });
 
 test('missingAccountIds reports accounts a transaction would point at but cannot find', () => {

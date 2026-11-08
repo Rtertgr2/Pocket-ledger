@@ -1,7 +1,7 @@
 import { useEffect, useRef, type ComponentRef } from 'react';
-import { StyleSheet, TextInput, View } from 'react-native';
+import { TextInput, View } from 'react-native';
 import { makeStyles, useTheme } from '../../providers/ThemeProvider';
-import { radius, spacing } from '../../theme';
+import { cardShadow, radius, spacing } from '../../theme';
 
 interface AmountInputProps {
   value: string;
@@ -41,18 +41,22 @@ export function AmountInput({ value, onChangeText, autoFocus = true, placeholder
 }
 
 const useStyles = makeStyles((palette) => ({
+  // The amount is the one field that gets its own card, as in the mockup: 40pt figures on a
+  // raised surface, so it reads as the headline of the form.
   row: {
     backgroundColor: palette.surface,
-    borderRadius: radius.md,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.card,
+    borderWidth: 1,
     borderColor: palette.border,
     paddingHorizontal: spacing.md,
+    ...cardShadow,
   },
   input: {
-    fontSize: 36,
+    fontSize: 40,
     fontWeight: '700',
+    letterSpacing: -0.8,
     color: palette.text,
-    paddingVertical: spacing.lg,
+    paddingVertical: 18,
     textAlign: 'center',
     fontVariant: ['tabular-nums'] as const,
   },

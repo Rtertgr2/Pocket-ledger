@@ -1,7 +1,7 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
 
 /** Bump when the DDL changes. Every bump needs an entry in `MIGRATIONS`. */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 /**
  * Schema for the local ledger. Money columns are INTEGER satang (1 baht = 100), not REAL.
@@ -30,6 +30,7 @@ export const DDL: string[] = [
     is_excluded_from_average INTEGER NOT NULL DEFAULT 0 CHECK (is_excluded_from_average IN (0, 1)),
     transaction_date TEXT NOT NULL,
     created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+    updated_at TEXT,
     FOREIGN KEY (account_id) REFERENCES accounts(id) ON DELETE RESTRICT,
     FOREIGN KEY (destination_account_id) REFERENCES accounts(id) ON DELETE RESTRICT,
     CHECK (type <> 'TRANSFER' OR (
@@ -67,7 +68,23 @@ export const DDL: string[] = [
  */
 export const MIGRATIONS: Record<number, string[]> = {
   2: ['ALTER TABLE transactions ADD COLUMN category TEXT'],
+  // v3: when the row was last edited. `ALTER TABLE` refuses a non-constant DEFAULT, so the column
+  // is nullable and filled here for existing rows; the app writes CURRENT_TIMESTAMP from now on.
+  3: [
+    'ALTER TABLE transactions ADD COLUMN updated_at TEXT',
+    'UPDATE transactions SET updated_at = created_at WHERE updated_at IS NULL',
+  ],
 };
+
+/**
+ * Run after `MIGRATIONS`, on both a fresh install and an upgraded one. These statements reference
+ * columns a migration may only just have added (`category` arrived in v2), so they cannot live in
+ * `DDL` — `DDL` runs first, and creating an index on a v1 database would fail before the upgrade.
+ */
+export const POST_MIGRATION_DDL: string[] = [
+  // Serves the category filter on the ledger screen.
+  'CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category)',
+];
 
 export async function initDatabase(db: SQLiteDatabase): Promise<void> {
   await db.execAsync('PRAGMA journal_mode = WAL');
@@ -85,6 +102,11 @@ export async function initDatabase(db: SQLiteDatabase): Promise<void> {
         await db.execAsync(`${statement};`);
       }
     }
+  }
+
+  // Indexes that need a migrated column run last, so they work on every starting version.
+  for (const statement of POST_MIGRATION_DDL) {
+    await db.execAsync(`${statement};`);
   }
 
   await db.execAsync(`PRAGMA user_version = ${SCHEMA_VERSION}`);

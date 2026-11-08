@@ -47,8 +47,8 @@ export async function insertBackup(
       const result = await db.runAsync(
         `INSERT OR IGNORE INTO transactions
            (id, account_id, destination_account_id, type, amount_satang, note, category,
-            is_excluded_from_average, transaction_date, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            is_excluded_from_average, transaction_date, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         transaction.id,
         transaction.account_id,
         transaction.destination_account_id,
@@ -58,7 +58,9 @@ export async function insertBackup(
         transaction.category,
         transaction.is_excluded_from_average,
         transaction.transaction_date,
-        transaction.created_at
+        transaction.created_at,
+        // A restore must keep the edit date; a v1 file arrives here already normalised.
+        transaction.updated_at ?? transaction.created_at
       );
       transactions += result.changes;
     }

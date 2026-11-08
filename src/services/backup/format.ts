@@ -2,11 +2,15 @@
 import type { Account, Transaction, TransactionType } from '../../types';
 
 /**
- * The on-disk backup envelope. A file is only accepted when `format` and `version` match, so a
- * stray JSON file (or a future format) is rejected instead of half-imported.
+ * The on-disk backup envelope. A file is accepted when `format` matches and `version` is an older
+ * or current format, so a stray JSON file (or a future format) is rejected instead of half-imported
+ * while a file exported by an earlier release still restores.
+ * v2 added `transactions.updated_at`; v1 files are normalised on read.
  */
 export const BACKUP_FORMAT = 'pocket-ledger.backup';
-export const BACKUP_VERSION = 1;
+export const BACKUP_VERSION = 2;
+/** Oldest format this build knows how to normalise. Anything below it is rejected. */
+const OLDEST_BACKUP_VERSION = 1;
 
 export interface BackupFile {
   format: typeof BACKUP_FORMAT;
@@ -52,7 +56,13 @@ export function parseBackup(raw: string): ParseResult {
   if (parsed.format !== BACKUP_FORMAT) {
     return { ok: false, error: 'ไฟล์นี้ไม่ใช่ไฟล์สำรองของ Pocket Ledger' };
   }
-  if (parsed.version !== BACKUP_VERSION) {
+  const version = parsed.version;
+  if (
+    typeof version !== 'number' ||
+    !Number.isInteger(version) ||
+    version < OLDEST_BACKUP_VERSION ||
+    version > BACKUP_VERSION
+  ) {
     return { ok: false, error: `ไฟล์สำรองเวอร์ชัน ${String(parsed.version)} ยังไม่รองรับ` };
   }
   if (!Array.isArray(parsed.accounts) || !Array.isArray(parsed.transactions)) {
@@ -153,6 +163,8 @@ function normalizeTransaction(row: unknown): Transaction | null {
   const destination = text(row.destination_account_id) ?? null;
   if (type === 'TRANSFER' && (!destination || destination === accountId)) return null;
 
+  const createdAt = text(row.created_at) ?? new Date().toISOString();
+
   return {
     id,
     account_id: accountId,
@@ -163,7 +175,9 @@ function normalizeTransaction(row: unknown): Transaction | null {
     category: text(row.category) ?? null,
     is_excluded_from_average: flag(row.is_excluded_from_average),
     transaction_date: date,
-    created_at: text(row.created_at) ?? new Date().toISOString(),
+    created_at: createdAt,
+    // A v1 file has no `updated_at`: the row was never edited, so it mirrors `created_at`.
+    updated_at: text(row.updated_at) ?? createdAt,
   };
 }
 

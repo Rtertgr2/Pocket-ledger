@@ -1,17 +1,20 @@
-import { useFocusEffect } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { Card } from '../../components/common/Card';
+import { PressableScale } from '../../components/common/PressableScale';
 import { Screen } from '../../components/common/Screen';
+import { SectionHead } from '../../components/common/SectionHead';
 import { useToast } from '../../components/common/Toast';
 import { CategoryBreakdown } from '../../components/reports/CategoryBreakdown';
 import { DailyBarChart } from '../../components/reports/DailyBarChart';
 import { makeStyles, useTheme } from '../../providers/ThemeProvider';
 import { listExpensesInRange, sumIncomeInRange } from '../../services/db/transactions';
+import { useAppStore } from '../../store/useAppStore';
 import { radius, spacing } from '../../theme';
 import type { ReportExpense } from '../../types';
-import { calculateDailyBurnRate, daysInMonth, monthRange } from '../../utils/calculations';
+import { daysInMonth, monthRange } from '../../utils/calculations';
 import { formatMonthLabel } from '../../utils/formatters';
 import { formatBaht } from '../../utils/money';
 import { categoryTotals, dailyExpenseTotals, peakDailyTotal } from '../../utils/reports';
@@ -25,6 +28,7 @@ export default function ReportsScreen() {
   const { showToast } = useToast();
   const { palette } = useTheme();
   const styles = useStyles();
+  const setLedgerFilter = useAppStore((s) => s.setLedgerFilter);
 
   const [cursor, setCursor] = useState(() => startOfMonth(new Date()));
   const [expenses, setExpenses] = useState<ReportExpense[]>([]);
@@ -64,31 +68,43 @@ export default function ReportsScreen() {
   );
   const categories = useMemo(() => categoryTotals(expenses), [expenses]);
   const totalSatang = days.reduce((sum, day) => sum + day.satang, 0);
-  const burnRateSatang = calculateDailyBurnRate(totalSatang, daysInMonth(year, monthIndex));
+  const peak = peakDailyTotal(days);
 
-  const currentMonth = startOfMonth(new Date());
+  // The average uses the days that have actually happened: a month in progress must not look cheap
+  // just because its future days are empty.
+  const now = new Date();
+  const isCurrentMonth = now.getFullYear() === year && now.getMonth() === monthIndex;
+  const elapsedDays = isCurrentMonth ? now.getDate() : daysInMonth(year, monthIndex);
+  const averageSatang = elapsedDays > 0 ? Math.round(totalSatang / elapsedDays) : 0;
+
+  const currentMonth = startOfMonth(now);
   const canGoForward = cursor.getTime() < currentMonth.getTime();
   const shiftMonth = (delta: number) => setCursor(new Date(year, monthIndex + delta, 1));
+
+  async function openCategory(category: string) {
+    await setLedgerFilter(db, { category });
+    router.push('/transactions');
+  }
 
   return (
     <Screen padded={false}>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
           <Text style={styles.title}>รายงาน</Text>
-          <Text style={styles.subtitle}>รายจ่ายที่ถูกนับในค่าเฉลี่ย (ไม่รวมโอนและรายการปรับยอด)</Text>
+          <Text style={styles.subtitle}>รายจ่ายที่บันทึกจริง (ไม่รวมโอนและปรับยอด)</Text>
         </View>
 
         <View style={styles.monthBar}>
-          <Pressable
+          <PressableScale
             accessibilityRole="button"
             accessibilityLabel="เดือนก่อนหน้า"
             onPress={() => shiftMonth(-1)}
             style={styles.monthButton}
           >
             <Text style={styles.monthArrow}>‹</Text>
-          </Pressable>
+          </PressableScale>
           <Text style={styles.monthLabel}>{formatMonthLabel(cursor)}</Text>
-          <Pressable
+          <PressableScale
             accessibilityRole="button"
             accessibilityLabel="เดือนถัดไป"
             accessibilityState={{ disabled: !canGoForward }}
@@ -97,41 +113,45 @@ export default function ReportsScreen() {
             style={[styles.monthButton, canGoForward ? null : styles.monthButtonDisabled]}
           >
             <Text style={styles.monthArrow}>›</Text>
-          </Pressable>
+          </PressableScale>
         </View>
 
-        <Card style={styles.card}>
-          <View style={styles.summaryRow}>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>รายรับเดือนนี้</Text>
-              <Text style={styles.summaryValue}>{formatBaht(incomeSatang)}</Text>
-            </View>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>เฉลี่ย / วัน</Text>
-              <Text style={styles.summaryValue}>{formatBaht(burnRateSatang)}</Text>
-            </View>
-            <View style={styles.summaryItem}>
-              <Text style={styles.summaryLabel}>จำนวนรายการ</Text>
-              <Text style={styles.summaryValue}>{expenses.length}</Text>
-            </View>
+        <Card style={styles.statsCard}>
+          <View style={styles.stat}>
+            <Text style={styles.statLabel}>รับเดือนนี้</Text>
+            <Text style={[styles.statValue, styles.incomeValue]} numberOfLines={1} adjustsFontSizeToFit>
+              {formatBaht(incomeSatang)}
+            </Text>
+          </View>
+          <View style={styles.stat}>
+            <Text style={styles.statLabel}>จ่าย · {expenses.length} รายการ</Text>
+            <Text style={[styles.statValue, styles.expenseValue]} numberOfLines={1} adjustsFontSizeToFit>
+              {formatBaht(totalSatang)}
+            </Text>
+          </View>
+          <View style={styles.stat}>
+            <Text style={styles.statLabel}>เฉลี่ย / วัน</Text>
+            <Text style={styles.statValue} numberOfLines={1} adjustsFontSizeToFit>
+              {formatBaht(averageSatang)}
+            </Text>
           </View>
         </Card>
 
         <Card style={styles.card}>
-          <Text style={styles.sectionTitle}>รายจ่ายรายวัน</Text>
+          <Text style={styles.cardTitle}>รายจ่ายรายวัน</Text>
           {loading ? (
             <ActivityIndicator color={palette.primaryText} />
           ) : (
-            <DailyBarChart totals={days} peak={peakDailyTotal(days)} />
+            <DailyBarChart totals={days} peak={peak} averageSatang={averageSatang} />
           )}
         </Card>
 
+        <SectionHead title="หมวดหมู่" hint="แตะหมวดเพื่อดูรายการ" />
         <Card style={styles.card}>
-          <Text style={styles.sectionTitle}>รายจ่ายตามหมวด</Text>
           {loading ? (
             <ActivityIndicator color={palette.primaryText} />
           ) : (
-            <CategoryBreakdown totals={categories} />
+            <CategoryBreakdown totals={categories} onSelect={openCategory} />
           )}
         </Card>
       </ScrollView>
@@ -140,10 +160,11 @@ export default function ReportsScreen() {
 }
 
 const useStyles = makeStyles((palette) => ({
-  content: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xxl, gap: spacing.md },
-  header: { paddingTop: spacing.md, gap: 2 },
-  title: { fontSize: 25, fontWeight: '700' as const, letterSpacing: -0.3, color: palette.text },
-  subtitle: { fontSize: 13, color: palette.muted },
+  // 96pt clears the floating tab bar so the last card is never hidden behind the centre button.
+  content: { paddingHorizontal: spacing.lg, paddingBottom: 96, gap: spacing.sm },
+  header: { paddingTop: spacing.sm, paddingBottom: spacing.sm, gap: 3 },
+  title: { fontSize: 25, fontWeight: '700' as const, letterSpacing: -0.4, color: palette.text },
+  subtitle: { fontSize: 12, color: palette.muted },
   monthBar: {
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
@@ -153,20 +174,29 @@ const useStyles = makeStyles((palette) => ({
     borderWidth: 1,
     borderColor: palette.border,
     paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
   },
-  monthButton: { paddingHorizontal: spacing.lg, paddingVertical: spacing.md },
+  monthButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+  },
   monthButtonDisabled: { opacity: 0.3 },
-  monthArrow: { fontSize: 22, fontWeight: '700' as const, color: palette.primaryText },
+  monthArrow: { fontSize: 22, fontWeight: '700' as const, color: palette.muted },
   monthLabel: { fontSize: 15, fontWeight: '700' as const, color: palette.text },
-  card: { gap: spacing.md },
-  summaryRow: { flexDirection: 'row' as const, gap: spacing.sm },
-  summaryItem: { flex: 1, gap: 2 },
-  summaryLabel: { fontSize: 11, color: palette.muted, lineHeight: 15 },
-  summaryValue: {
+  statsCard: { flexDirection: 'row' as const, gap: spacing.sm },
+  stat: { flex: 1, gap: 6, minWidth: 0 },
+  statLabel: { fontSize: 11, color: palette.muted, lineHeight: 15 },
+  statValue: {
     fontSize: 16,
     fontWeight: '700' as const,
     color: palette.text,
     fontVariant: ['tabular-nums'] as const,
   },
-  sectionTitle: { fontSize: 15, fontWeight: '700' as const, color: palette.text },
+  incomeValue: { color: palette.income },
+  expenseValue: { color: palette.expense },
+  card: { gap: spacing.md },
+  cardTitle: { fontSize: 15, fontWeight: '700' as const, color: palette.text },
 }));

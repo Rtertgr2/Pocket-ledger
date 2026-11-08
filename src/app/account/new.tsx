@@ -1,9 +1,10 @@
 import { router } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
+import { Text, View } from 'react-native';
 import { AmountInput } from '../../components/common/AmountInput';
 import { Button } from '../../components/common/Button';
+import { ColorSwatchPicker } from '../../components/common/ColorSwatchPicker';
 import { FormScreen } from '../../components/common/FormScreen';
 import { TextField } from '../../components/common/TextField';
 import { useToast } from '../../components/common/Toast';
@@ -45,7 +46,15 @@ export default function NewAccountScreen() {
   }
 
   return (
-    <FormScreen footer={<Button label={saving ? 'กำลังบันทึก…' : 'สร้างบัญชี'} onPress={onSave} disabled={!canSave} />}>
+    <FormScreen
+      footer={
+        <Button
+          label={saving ? 'กำลังบันทึก…' : 'สร้างบัญชี'}
+          onPress={onSave}
+          disabled={!canSave}
+        />
+      }
+    >
       <TextField
         label="ชื่อบัญชี"
         value={name}
@@ -54,29 +63,17 @@ export default function NewAccountScreen() {
         autoFocus
         maxLength={40}
       />
-      <View style={styles.balance}>
+
+      <View style={styles.field}>
         <Text style={styles.label}>ยอดเงินเริ่มต้น (ไม่บังคับ)</Text>
         <AmountInput value={balanceText} onChangeText={setBalanceText} autoFocus={false} />
       </View>
-      <View style={styles.colors}>
+
+      <View style={styles.field}>
         <Text style={styles.label}>สีการ์ด</Text>
-        <View style={styles.swatches}>
-          {ACCOUNT_COLORS.map((option) => (
-            <Pressable
-              key={option}
-              accessibilityRole="radio"
-              accessibilityLabel={`สี ${option}`}
-              accessibilityState={{ selected: option === color }}
-              onPress={() => setColor(option)}
-              style={[
-                styles.swatch,
-                { backgroundColor: option },
-                option === color ? styles.swatchSelected : null,
-              ]}
-            />
-          ))}
-        </View>
+        <ColorSwatchPicker value={color} onChange={setColor} />
       </View>
+
       <Text style={styles.hint}>
         ยอดเริ่มต้นคือเงินที่มีอยู่จริงในบัญชีตอนนี้ รายการถัดไปจะบวก–ลบจากยอดนี้
       </Text>
@@ -85,11 +82,7 @@ export default function NewAccountScreen() {
 }
 
 const useStyles = makeStyles((palette) => ({
-  balance: { gap: spacing.xs },
-  label: { fontSize: 13, fontWeight: '600' as const, color: palette.muted },
-  colors: { gap: spacing.sm },
-  swatches: { flexDirection: 'row' as const, gap: spacing.sm },
-  swatch: { width: 34, height: 34, borderRadius: 17, borderWidth: 3, borderColor: 'transparent' },
-  swatchSelected: { borderColor: palette.text },
+  field: { gap: spacing.sm },
+  label: { fontSize: 12, fontWeight: '600' as const, color: palette.muted },
   hint: { fontSize: 12, color: palette.muted },
 }));

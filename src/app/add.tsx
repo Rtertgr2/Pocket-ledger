@@ -1,20 +1,26 @@
 import { router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
-import { EXPENSE_CATEGORIES } from '../categories';
-import { AccountPicker } from '../components/common/AccountPicker';
+import { Text, View } from 'react-native';
+import { categoriesFor } from '../categories';
 import { AmountInput } from '../components/common/AmountInput';
 import { Button } from '../components/common/Button';
+import { Chip } from '../components/common/Chip';
 import { FormScreen } from '../components/common/FormScreen';
+import { Segmented } from '../components/common/Segmented';
 import { TextField } from '../components/common/TextField';
 import { useToast } from '../components/common/Toast';
 import { makeStyles } from '../providers/ThemeProvider';
 import { useAppStore } from '../store/useAppStore';
-import { radius, spacing } from '../theme';
+import { spacing } from '../theme';
 import { parseAmountToSatang } from '../utils/money';
 
 type EntryType = 'EXPENSE' | 'INCOME';
+
+const TYPE_OPTIONS = [
+  { key: 'EXPENSE', label: 'รายจ่าย' },
+  { key: 'INCOME', label: 'รายรับ' },
+] as const;
 
 export default function AddTransactionScreen() {
   const db = useSQLiteContext();
@@ -37,6 +43,12 @@ export default function AddTransactionScreen() {
   const satang = parseAmountToSatang(amountText);
   const canSave = Boolean(accountId) && satang !== null && satang > 0 && !saving;
 
+  function switchType(next: EntryType) {
+    setType(next);
+    // The two lists share only "อื่น ๆ", so a category from the other side would be a typo.
+    setCategory(null);
+  }
+
   async function onSave() {
     if (!accountId || satang === null || satang <= 0) return;
     setSaving(true);
@@ -46,8 +58,7 @@ export default function AddTransactionScreen() {
         type,
         amount_satang: satang,
         note: note.trim() || undefined,
-        // Income is not categorised: the reports only break down expenses.
-        category: type === 'EXPENSE' ? (category ?? undefined) : undefined,
+        category: category ?? undefined,
       });
       showToast('บันทึกสำเร็จ');
       router.back();
@@ -58,53 +69,40 @@ export default function AddTransactionScreen() {
   }
 
   return (
-    <FormScreen footer={<Button label={saving ? 'กำลังบันทึก…' : 'บันทึก'} onPress={onSave} disabled={!canSave} />}>
-      <View style={styles.toggle}>
-        {(['EXPENSE', 'INCOME'] as const).map((option) => {
-          const selected = option === type;
-          return (
-            <Pressable
-              key={option}
-              accessibilityRole="tab"
-              accessibilityState={{ selected }}
-              onPress={() => setType(option)}
-              style={[styles.toggleItem, selected ? styles.toggleSelected : null]}
-            >
-              <Text style={[styles.toggleLabel, selected ? styles.toggleLabelSelected : null]}>
-                {option === 'EXPENSE' ? 'รายจ่าย' : 'รายรับ'}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+    <FormScreen
+      footer={<Button label={saving ? 'กำลังบันทึก…' : 'บันทึก'} onPress={onSave} disabled={!canSave} />}
+    >
+      <Segmented options={TYPE_OPTIONS} value={type} onChange={switchType} label="ประเภทรายการ" />
 
       <AmountInput value={amountText} onChangeText={setAmountText} />
 
-      <AccountPicker label="บัญชี" accounts={accounts} selectedId={accountId} onSelect={setAccountId} />
-
-      {type === 'EXPENSE' ? (
-        <View style={styles.field}>
-          <Text style={styles.fieldLabel}>หมวดหมู่ (ไม่บังคับ)</Text>
-          <View style={styles.chips}>
-            {EXPENSE_CATEGORIES.map((option) => {
-              const selected = option === category;
-              return (
-                <Pressable
-                  key={option}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected }}
-                  onPress={() => setCategory(selected ? null : option)}
-                  style={[styles.chip, selected ? styles.chipSelected : null]}
-                >
-                  <Text style={[styles.chipLabel, selected ? styles.chipLabelSelected : null]}>
-                    {option}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
+      <View style={styles.field}>
+        <Text style={styles.label}>บัญชี</Text>
+        <View style={styles.chips}>
+          {accounts.map((account) => (
+            <Chip
+              key={account.id}
+              label={account.name}
+              selected={account.id === accountId}
+              onPress={() => setAccountId(account.id)}
+            />
+          ))}
         </View>
-      ) : null}
+      </View>
+
+      <View style={styles.field}>
+        <Text style={styles.label}>หมวดหมู่ (ไม่บังคับ)</Text>
+        <View style={styles.chips}>
+          {categoriesFor(type).map((option) => (
+            <Chip
+              key={option}
+              label={option}
+              selected={option === category}
+              onPress={() => setCategory(option === category ? null : option)}
+            />
+          ))}
+        </View>
+      </View>
 
       <TextField
         label="หมายเหตุ (ไม่บังคับ)"
@@ -122,35 +120,8 @@ export default function AddTransactionScreen() {
 }
 
 const useStyles = makeStyles((palette) => ({
-  toggle: {
-    flexDirection: 'row' as const,
-    backgroundColor: palette.surfaceMuted,
-    borderRadius: radius.md,
-    padding: 4,
-    gap: 4,
-  },
-  toggleItem: {
-    flex: 1,
-    paddingVertical: spacing.sm,
-    borderRadius: radius.sm,
-    alignItems: 'center' as const,
-  },
-  toggleSelected: { backgroundColor: palette.surface },
-  toggleLabel: { fontSize: 14, fontWeight: '600' as const, color: palette.muted },
-  toggleLabelSelected: { color: palette.text },
   field: { gap: spacing.sm },
-  fieldLabel: { fontSize: 13, fontWeight: '600' as const, color: palette.muted },
+  label: { fontSize: 12, fontWeight: '600' as const, color: palette.muted },
   chips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: spacing.sm },
-  chip: {
-    paddingVertical: spacing.sm + 1,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.pill,
-    backgroundColor: palette.surface,
-    borderWidth: 1,
-    borderColor: palette.border,
-  },
-  chipSelected: { backgroundColor: palette.primary, borderColor: palette.primary },
-  chipLabel: { fontSize: 13, fontWeight: '600' as const, color: palette.text },
-  chipLabelSelected: { color: palette.onPrimary },
   error: { fontSize: 12, color: palette.expense },
 }));

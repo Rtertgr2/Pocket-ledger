@@ -47,11 +47,27 @@ export default function ReconcileScreen() {
   }
 
   return (
-    <FormScreen footer={<Button label={saving ? 'กำลังบันทึก…' : 'ยืนยันการปรับยอด'} onPress={onSave} disabled={!canSave} />}>
-      <AccountPicker label="บัญชี" accounts={accounts} selectedId={accountId} onSelect={setAccountId} />
+    <FormScreen
+      footer={
+        <Button
+          label={saving ? 'กำลังบันทึก…' : 'ยืนยันการปรับยอด'}
+          onPress={onSave}
+          disabled={!canSave}
+        />
+      }
+    >
+      <AccountPicker
+        label="บัญชี"
+        accounts={accounts}
+        selectedId={accountId}
+        onSelect={setAccountId}
+      />
 
       {account ? (
-        <Text style={styles.current}>ยอดในระบบตอนนี้ {formatBaht(account.balance_satang)}</Text>
+        <View style={styles.current}>
+          <Text style={styles.currentLabel}>ยอดในระบบตอนนี้</Text>
+          <Text style={styles.currentAmount}>{formatBaht(account.balance_satang)}</Text>
+        </View>
       ) : null}
 
       <AmountInput value={amountText} onChangeText={setAmountText} placeholder="ยอดเงินจริง" />
@@ -61,9 +77,21 @@ export default function ReconcileScreen() {
       ) : delta === 0 ? (
         <Text style={styles.hint}>ยอดตรงกับในระบบแล้ว ไม่มีอะไรต้องบันทึก</Text>
       ) : (
-        <View style={styles.delta}>
-          <Text style={styles.deltaLabel}>ระบบจะบันทึกเป็น{delta > 0 ? 'รายรับ' : 'รายจ่าย'}</Text>
-          <Text style={[styles.deltaAmount, { color: delta > 0 ? palette.income : palette.expense }]}>
+        <View
+          style={[
+            styles.delta,
+            {
+              backgroundColor: delta > 0 ? palette.incomeSoft : palette.expenseSoft,
+              borderColor: delta > 0 ? palette.incomeSoft : palette.expenseSoft,
+            },
+          ]}
+        >
+          <Text style={styles.deltaLabel}>
+            ระบบจะบันทึกเป็น{delta > 0 ? 'รายรับ' : 'รายจ่าย'}
+          </Text>
+          <Text
+            style={[styles.deltaAmount, { color: delta > 0 ? palette.income : palette.expense }]}
+          >
             {delta > 0 ? '+' : '-'}
             {formatBaht(Math.abs(delta))}
           </Text>
@@ -75,14 +103,37 @@ export default function ReconcileScreen() {
 }
 
 const useStyles = makeStyles((palette) => ({
-  current: { fontSize: 13, color: palette.muted },
   hint: { fontSize: 12, color: palette.muted },
+  current: {
+    flexDirection: 'row' as const,
+    alignItems: 'baseline' as const,
+    justifyContent: 'space-between' as const,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: palette.border,
+    backgroundColor: palette.surface,
+  },
+  currentLabel: { fontSize: 12, color: palette.muted },
+  currentAmount: {
+    fontSize: 18,
+    fontWeight: '800' as const,
+    color: palette.text,
+    fontVariant: ['tabular-nums'] as const,
+  },
   delta: {
     gap: spacing.xs,
-    backgroundColor: palette.surfaceMuted,
     borderRadius: radius.md,
+    borderWidth: 1,
     padding: spacing.lg,
   },
   deltaLabel: { fontSize: 13, fontWeight: '600' as const, color: palette.text },
-  deltaAmount: { fontSize: 22, fontWeight: '800' as const, fontVariant: ['tabular-nums'] as const },
+  deltaAmount: {
+    fontSize: 26,
+    fontWeight: '800' as const,
+    letterSpacing: -0.5,
+    fontVariant: ['tabular-nums'] as const,
+  },
 }));

@@ -6,6 +6,8 @@ export interface Palette {
   bg: string;
   surface: string;
   surfaceMuted: string;
+  /** Raised neutral behind segmented tracks, chips and the ring's empty track. */
+  tile: string;
   border: string;
   /**
    * Outline for controls whose fill is nearly the page colour (secondary buttons, chips).
@@ -13,12 +15,12 @@ export interface Palette {
    * identifiable; `border` stays decorative for card edges and dividers.
    */
   borderStrong: string;
-  /** Fill colour: buttons, FAB, selected chips, chart bars, the hero card. */
+  /** Fill colour: buttons, selected chips, chart bars. */
   primary: string;
   /**
    * The same hue tuned for text and icons on `bg`/`surface` — links, tab selection, arrows.
-   * Dark mode fills stay dark (white labels) while the accent has to go light to clear 4.5:1,
-   * so the two cannot share one value.
+   * Dark mode fills stay light (dark labels) while the accent has to stay light too, so the two
+   * cannot share one value with `onPrimary`.
    */
   primaryText: string;
   /** 12-14% tint of `primary` — icon tiles and section chips. */
@@ -31,12 +33,14 @@ export interface Palette {
   expense: string;
   expenseSoft: string;
   transfer: string;
-  /**
-   * Hero balance card. Always a deep green with white type, in both schemes — the mockup does
-   * not invert it, and a light hero would wash out the ring on top of it.
-   */
+  /** A hue reserved for non-semantic highlights (transfers, links inside charts). */
+  accent: string;
+  /** Legacy hero surface; kept so older screens keep a valid token. */
   hero: string;
-  /** Text on `primary` fills. Dark mode fills are dark greens, so this stays white. */
+  /** The raised centre button of the tab bar. */
+  navAdd: string;
+  onNavAdd: string;
+  /** Text on `primary` fills. Dark mode fills are light greens, so this goes dark. */
   onPrimary: string;
   onPrimaryMuted: string;
   /** Text on `expense` fills (danger button, error toast) — flips per scheme. */
@@ -48,47 +52,55 @@ export interface Palette {
 
 export const palettes: Record<ColorScheme, Palette> = {
   light: {
-    bg: '#F3F3F1',
+    bg: '#F2F3F0',
     surface: '#FFFFFF',
-    surfaceMuted: '#EDF0EC',
-    border: '#E7E7E1',
+    surfaceMuted: '#F7F8F5',
+    tile: '#EDF0EC',
+    border: '#E5E7E0',
     borderStrong: '#7F8A81',
-    primary: '#2F4A3D',
-    primaryText: '#2F4A3D',
+    primary: '#2F6B4F',
+    primaryText: '#2C6549',
     primarySoft: '#EDF0EC',
     hero: '#2F4A3D',
     text: '#1B1F1C',
     muted: '#636D67',
     income: '#2F7D57',
-    incomeSoft: '#E8F2EC',
-    expense: '#B3473A',
-    expenseSoft: '#F8EAE7',
+    incomeSoft: '#E7F3EC',
+    expense: '#C0483D',
+    expenseSoft: '#FAEAE7',
     transfer: '#3B6E8F',
+    accent: '#3F74E0',
+    navAdd: '#2F6B4F',
+    onNavAdd: '#FFFFFF',
     onPrimary: '#FFFFFF',
     onPrimaryMuted: 'rgba(255,255,255,0.82)',
     onExpense: '#FFFFFF',
-    overlayBg: '#1E2A22',
+    overlayBg: '#1B1F1C',
     overlayText: '#FFFFFF',
   },
   dark: {
-    bg: '#101311',
-    surface: '#1A1E1B',
-    surfaceMuted: '#202521',
-    border: '#2B312C',
+    bg: '#0D0F0E',
+    surface: '#171A18',
+    surfaceMuted: '#1E2220',
+    tile: '#212623',
+    border: '#272C28',
     borderStrong: '#6B7A71',
-    primary: '#3F6D57',
-    primaryText: '#9AC7AE',
-    primarySoft: '#242A25',
+    primary: '#4CC08A',
+    primaryText: '#4CC08A',
+    primarySoft: '#212623',
     hero: '#26382F',
-    text: '#EEF1ED',
-    muted: '#9AA49B',
-    income: '#6AC295',
-    incomeSoft: '#1C2A22',
-    expense: '#E08A7C',
-    expenseSoft: '#2C211E',
+    text: '#EEF2EE',
+    muted: '#8E978F',
+    income: '#4FD18F',
+    incomeSoft: '#16301F',
+    expense: '#FF7A7A',
+    expenseSoft: '#2F1A1A',
     transfer: '#6FA8CF',
-    onPrimary: '#FFFFFF',
-    onPrimaryMuted: 'rgba(255,255,255,0.82)',
+    accent: '#5B8DEF',
+    navAdd: '#35785A',
+    onNavAdd: '#FFFFFF',
+    onPrimary: '#0B1410',
+    onPrimaryMuted: 'rgba(11,20,16,0.82)',
     onExpense: '#2A1512',
     overlayBg: '#E8EDF1',
     overlayText: '#101417',
@@ -120,8 +132,8 @@ export const radius = {
 export const cardShadow = {
   shadowColor: '#101814',
   shadowOpacity: 0.07,
-  shadowRadius: 10,
-  shadowOffset: { width: 0, height: 4 },
+  shadowRadius: 12,
+  shadowOffset: { width: 0, height: 5 },
   elevation: 2,
 } as const;
 
@@ -135,18 +147,25 @@ export const heroShadow = {
 } as const;
 
 /**
- * Ring / pill colours for "รายจ่ายวันนี้แยกตามหมวด". Deliberately not the semantic palette:
+ * Ring / pill colours for "รายจ่ายตามหมวด". Deliberately not the semantic palette:
  * neighbouring segments must be told apart by hue, not by meaning, and the label next to each
  * dot carries the accessible name.
  */
 export const CATEGORY_COLORS = [
-  '#D9B56A',
-  '#7FA7CF',
-  '#CD8A72',
-  '#9DC4A8',
-  '#B39DDB',
+  '#5B8DEF',
+  '#4CC08A',
+  '#E2A24A',
+  '#E57A6A',
+  '#A98FE0',
+  '#6FC2B8',
+  '#C98FB0',
   '#93A08A',
 ] as const;
+
+/** Category tint by index, stable across ring and lists so the same category keeps its hue. */
+export function categoryColor(index: number): string {
+  return CATEGORY_COLORS[index % CATEGORY_COLORS.length];
+}
 
 /** `color` at `alpha` over any surface — the fallback tint when no solid soft colour exists. */
 export function tint(color: string, alpha: number): string {
