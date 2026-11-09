@@ -6,6 +6,7 @@ import { ActivityIndicator, Text, View } from 'react-native';
 import { AccountPicker } from '../components/common/AccountPicker';
 import { AmountInput } from '../components/common/AmountInput';
 import { Button } from '../components/common/Button';
+import { DateField } from '../components/common/DateField';
 import { FormScreen } from '../components/common/FormScreen';
 import { TextField } from '../components/common/TextField';
 import { useToast } from '../components/common/Toast';
@@ -32,6 +33,7 @@ export default function TransferScreen() {
   const [toId, setToId] = useState<string | null>(accounts[1]?.id ?? null);
   const [amountText, setAmountText] = useState('');
   const [note, setNote] = useState('');
+  const [dateIso, setDateIso] = useState(() => new Date().toISOString());
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(Boolean(editingId));
   const [editing, setEditing] = useState<Transaction | null>(null);
@@ -54,6 +56,7 @@ export default function TransferScreen() {
         setToId(row.destination_account_id);
         setAmountText(formatSatang(row.amount_satang));
         setNote(row.note ?? '');
+        setDateIso(row.transaction_date);
       } catch (error) {
         if (!cancelled) {
           showToast(error instanceof Error ? error.message : 'โหลดรายการไม่สำเร็จ', 'error');
@@ -89,7 +92,7 @@ export default function TransferScreen() {
           amount_satang: satang,
           note: note.trim() || null,
           is_excluded_from_average: editing.is_excluded_from_average,
-          transaction_date: editing.transaction_date,
+          transaction_date: dateIso,
         });
         showToast('บันทึกการแก้ไขแล้ว');
       } else {
@@ -98,6 +101,7 @@ export default function TransferScreen() {
           destination_account_id: toId,
           amount_satang: satang,
           note: note.trim() || undefined,
+          transaction_date: dateIso,
         });
         showToast('โอนเงินสำเร็จ');
       }
@@ -161,6 +165,8 @@ export default function TransferScreen() {
         onSelect={setToId}
         disabledId={fromId}
       />
+
+      <DateField value={dateIso} onChange={setDateIso} />
 
       <TextField
         label="บันทึกช่วยจำ (ไม่บังคับ)"

@@ -30,7 +30,8 @@
       "expo-system-ui",
       "expo-quick-actions",
       "expo-sharing",
-      "./plugins/withReleaseSigning"
+      "./plugins/withReleaseSigning",
+      "@react-native-community/datetimepicker"
     ],
     "experiments": {
       "typedRoutes": true

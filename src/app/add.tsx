@@ -6,6 +6,7 @@ import { categoriesFor } from '../categories';
 import { AmountInput } from '../components/common/AmountInput';
 import { Button } from '../components/common/Button';
 import { Chip } from '../components/common/Chip';
+import { DateField } from '../components/common/DateField';
 import { FormScreen } from '../components/common/FormScreen';
 import { Segmented } from '../components/common/Segmented';
 import { TextField } from '../components/common/TextField';
@@ -43,6 +44,7 @@ export default function AddTransactionScreen() {
   const [accountId, setAccountId] = useState<string | null>(
     params.accountId ?? accounts[0]?.id ?? null
   );
+  const [dateIso, setDateIso] = useState(() => new Date().toISOString());
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(Boolean(editingId));
   // The full row, so the fields this form cannot edit survive a save untouched.
@@ -67,6 +69,7 @@ export default function AddTransactionScreen() {
         setNote(row.note ?? '');
         setCategory(row.category);
         setAccountId(row.account_id);
+        setDateIso(row.transaction_date);
       } catch (error) {
         if (!cancelled) {
           showToast(error instanceof Error ? error.message : 'โหลดรายการไม่สำเร็จ', 'error');
@@ -109,7 +112,7 @@ export default function AddTransactionScreen() {
           note: note.trim() || null,
           category: category ?? null,
           is_excluded_from_average: editing.is_excluded_from_average,
-          transaction_date: editing.transaction_date,
+          transaction_date: dateIso,
         });
         showToast('บันทึกการแก้ไขแล้ว');
       } else {
@@ -119,6 +122,7 @@ export default function AddTransactionScreen() {
           amount_satang: satang,
           note: note.trim() || undefined,
           category: category ?? undefined,
+          transaction_date: dateIso,
         });
         showToast('บันทึกสำเร็จ');
       }
@@ -154,6 +158,8 @@ export default function AddTransactionScreen() {
       <Segmented options={TYPE_OPTIONS} value={type} onChange={switchType} label="ประเภทรายการ" />
 
       <AmountInput value={amountText} onChangeText={setAmountText} autoFocus={!isEditing} />
+
+      <DateField value={dateIso} onChange={setDateIso} />
 
       <View style={styles.field}>
         <Text style={styles.label}>บัญชี</Text>

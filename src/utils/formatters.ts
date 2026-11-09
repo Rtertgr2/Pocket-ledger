@@ -29,12 +29,17 @@ export function dayKey(date: Date): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+/** "28 ต.ค. 2026" — the plain calendar date, local time. */
+export function formatDate(date: Date): string {
+  return `${date.getDate()} ${THAI_MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+}
+
 /** "วันนี้" / "เมื่อวาน" / "28 ต.ค. 2026" — the section header for a day of transactions. */
 export function formatDayLabel(date: Date, now: Date = new Date()): string {
   if (dayKey(date) === dayKey(now)) return 'วันนี้';
   const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);
   if (dayKey(date) === dayKey(yesterday)) return 'เมื่อวาน';
-  return `${date.getDate()} ${THAI_MONTHS[date.getMonth()]} ${date.getFullYear()}`;
+  return formatDate(date);
 }
 
 /** "ต.ค. 2026" — the month a report is showing. */
