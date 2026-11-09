@@ -2,7 +2,7 @@ import { randomUUID } from 'expo-crypto';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Text, View } from 'react-native';
+import { ActivityIndicator, ScrollView, Text, View } from 'react-native';
 import { categoriesFor } from '../categories';
 import { QuickPresets } from '../components/add/QuickPresets';
 import { SavePresetDialog } from '../components/add/SavePresetDialog';
@@ -121,6 +121,34 @@ export default function AddTransactionScreen() {
     setCategory(null);
   }
 
+  /**
+   * Records the entry without leaving the form, so a run of small payments is typed in one go.
+   * Amount and note are cleared for the next entry; account, category and date stay, because they
+   * usually do not change from one entry to the next.
+   */
+  async function onSaveAndContinue() {
+    if (!accountId || satang === null || satang <= 0) return;
+    setSaving(true);
+    try {
+      await addTransaction(db, {
+        account_id: accountId,
+        type,
+        amount_satang: satang,
+        note: note.trim() || undefined,
+        category: category ?? undefined,
+        transaction_date: dateIso,
+      });
+      writeLastEntry({ type, account_id: accountId, category });
+      setAmountText('');
+      setNote('');
+      showToast('บันทึกแล้ว — จดต่อได้เลย');
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : 'บันทึกไม่สำเร็จ', 'error');
+    } finally {
+      setSaving(false);
+    }
+  }
+
   async function onSave() {
     if (!accountId || satang === null || satang <= 0) return;
     setSaving(true);
@@ -203,11 +231,21 @@ export default function AddTransactionScreen() {
   return (
     <FormScreen
       footer={
-        <Button
-          label={saving ? 'กำลังบันทึก…' : isEditing ? 'บันทึกการแก้ไข' : 'บันทึก'}
-          onPress={onSave}
-          disabled={!canSave}
-        />
+        <View style={styles.footer}>
+          <Button
+            label={saving ? 'กำลังบันทึก…' : isEditing ? 'บันทึกการแก้ไข' : 'บันทึก'}
+            onPress={onSave}
+            disabled={!canSave}
+          />
+          {isEditing ? null : (
+            <Button
+              label="บันทึกแล้วจดต่อ"
+              variant="secondary"
+              onPress={onSaveAndContinue}
+              disabled={!canSave}
+            />
+          )}
+        </View>
       }
     >
       <Stack.Screen options={{ title: isEditing ? 'แก้ไขรายการ' : 'บันทึกรายการ' }} />
@@ -236,7 +274,14 @@ export default function AddTransactionScreen() {
 
       <View style={styles.field}>
         <Text style={styles.label}>หมวดหมู่ (ไม่บังคับ)</Text>
-        <View style={styles.chips}>
+        {/* One row that scrolls: wrapping the 7 categories onto three lines pushed the save
+            button off a 360dp-wide screen. */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          contentContainerStyle={styles.chipRow}
+        >
           {options.map((option) => (
             <Chip
               key={option}
@@ -245,7 +290,7 @@ export default function AddTransactionScreen() {
               onPress={() => setCategory(option === category ? null : option)}
             />
           ))}
-        </View>
+        </ScrollView>
       </View>
 
       <TextField
@@ -283,6 +328,8 @@ const useStyles = makeStyles((palette) => ({
   field: { gap: spacing.sm },
   label: { fontSize: 12, fontWeight: '600' as const, color: palette.muted },
   chips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: spacing.sm },
+  chipRow: { flexDirection: 'row' as const, gap: spacing.sm, paddingRight: spacing.lg },
+  footer: { gap: spacing.sm },
   error: { fontSize: 12, color: palette.expense },
   loading: { paddingVertical: spacing.xxl },
 }));
