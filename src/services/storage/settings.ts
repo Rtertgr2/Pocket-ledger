@@ -1,4 +1,11 @@
 import Storage from 'expo-sqlite/kv-store';
+import {
+  parseLastEntry,
+  parsePresets,
+  serializePresets,
+  type LastEntry,
+  type QuickPreset,
+} from '../../utils/preset';
 
 /**
  * App settings that are not ledger data. Backed by expo-sqlite's key-value store, which is
@@ -12,6 +19,8 @@ const KEYS = {
   themeMode: 'settings.themeMode',
   backupEndpoint: 'settings.backupEndpoint',
   backupSecret: 'settings.backupSecret',
+  quickEntry: 'settings.quickEntry',
+  lastEntry: 'settings.lastEntry',
 } as const;
 
 const THEME_MODES: ThemeMode[] = ['light', 'dark', 'system'];
@@ -46,4 +55,26 @@ export function readBackupSecret(): string {
 export function writeBackupConfig(endpoint: string, secret: string): void {
   write(KEYS.backupEndpoint, endpoint.trim());
   write(KEYS.backupSecret, secret.trim());
+}
+
+/** Quick Vault presets. Parsed defensively, so a corrupt value just reads as an empty vault. */
+export function readQuickEntry(): QuickPreset[] {
+  return parsePresets(read(KEYS.quickEntry));
+}
+
+export function writeQuickEntry(presets: QuickPreset[]): void {
+  write(KEYS.quickEntry, presets.length > 0 ? serializePresets(presets) : '');
+}
+
+/** The account and category to preselect the next time the add form opens. */
+export function readLastEntry(): LastEntry | null {
+  return parseLastEntry(read(KEYS.lastEntry));
+}
+
+export function writeLastEntry(entry: LastEntry): void {
+  write(KEYS.lastEntry, JSON.stringify(entry));
+}
+
+export function clearLastEntry(): void {
+  write(KEYS.lastEntry, '');
 }

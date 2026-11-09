@@ -15,11 +15,20 @@ import { useToast } from '../../components/common/Toast';
 import { makeStyles, useTheme } from '../../providers/ThemeProvider';
 import { SCHEMA_VERSION } from '../../services/db/schema';
 import { countTransactions } from '../../services/db/transactions';
-import { readBackupEndpoint, readBackupSecret, writeBackupConfig, type ThemeMode } from '../../services/storage/settings';
+import {
+  clearLastEntry,
+  readBackupEndpoint,
+  readBackupSecret,
+  readQuickEntry,
+  writeBackupConfig,
+  writeQuickEntry,
+  type ThemeMode,
+} from '../../services/storage/settings';
 import { checkForUpdate as fetchLatestRelease } from '../../services/updates/feed';
 import { useAppStore } from '../../store/useAppStore';
 import { radius, spacing, readableTextOn } from '../../theme';
 import { formatBaht } from '../../utils/money';
+import { MAX_PRESETS, type QuickPreset } from '../../utils/preset';
 
 const THEME_OPTIONS: { mode: ThemeMode; label: string }[] = [
   { mode: 'light', label: 'สว่าง' },
@@ -69,7 +78,7 @@ function BlockHead({
 export default function SettingsScreen() {
   const db = useSQLiteContext();
   const { showToast } = useToast();
-  const { mode, setMode } = useTheme();
+  const { mode, setMode, palette } = useTheme();
   const styles = useStyles();
 
   const accounts = useAppStore((s) => s.accounts);
@@ -80,6 +89,8 @@ export default function SettingsScreen() {
   const [endpoint, setEndpoint] = useState(() => readBackupEndpoint());
   const [secret, setSecret] = useState(() => readBackupSecret());
   const [transactionCount, setTransactionCount] = useState(0);
+  // Presets are added from the add form, so the list is re-read every time this tab is opened.
+  const [presets, setPresets] = useState<QuickPreset[]>(() => readQuickEntry());
   const [checking, setChecking] = useState(false);
   const [updateNote, setUpdateNote] = useState('ตรวจสอบเวอร์ชันล่าสุดจากช่องทางอัปเดตของแอป');
 
@@ -96,12 +107,25 @@ export default function SettingsScreen() {
         .catch(() => {
           // Same contract as the account read: keep the last known number.
         });
+      setPresets(readQuickEntry());
     }, [db, fetchAccounts])
   );
 
   function saveBackup() {
     writeBackupConfig(endpoint, secret);
     showToast('บันทึกการตั้งค่าสำรองข้อมูลแล้ว');
+  }
+
+  function removePreset(id: string) {
+    const next = presets.filter((preset) => preset.id !== id);
+    writeQuickEntry(next);
+    setPresets(next);
+    showToast('ลบรายการโปรดแล้ว');
+  }
+
+  function clearRemembered() {
+    clearLastEntry();
+    showToast('ล้างบัญชี/หมวดที่จำไว้แล้ว');
   }
 
   /** Irreversible, so it always asks first and names what survives (the theme). */
@@ -190,6 +214,47 @@ export default function SettingsScreen() {
               label="ธีม"
             />
             <Text style={styles.hint}>เลือก “ตามระบบ” เพื่อเปลี่ยนตามการตั้งค่าของมือถือ</Text>
+          </Card>
+        </Group>
+
+        <Group label="รายการโปรด">
+          <Card style={styles.card}>
+            <BlockHead
+              icon="star-outline"
+              title="Quick Vault"
+              sub={`${presets.length}/${MAX_PRESETS} รายการ · แตะในหน้าเพิ่มรายการเพื่อเติมฟอร์ม`}
+            />
+            {presets.length === 0 ? (
+              <Text style={styles.hint}>
+                ยังไม่มีรายการโปรด — เพิ่มได้จากปุ่ม “บันทึกเป็นรายการโปรด” ในหน้าเพิ่มหรือแก้ไขรายการ
+              </Text>
+            ) : (
+              presets.map((preset) => (
+                <View key={preset.id} style={styles.presetRow}>
+                  <View style={styles.accountTexts}>
+                    <Text style={styles.accountName}>{preset.label}</Text>
+                    <Text style={styles.hint}>
+                      {preset.type === 'INCOME' ? 'รายรับ' : 'รายจ่าย'} ·{' '}
+                      {accounts.find((account) => account.id === preset.account_id)?.name ??
+                        'บัญชีที่ถูกลบ'}
+                      {preset.category ? ` · ${preset.category}` : ''}
+                    </Text>
+                  </View>
+                  <Text style={styles.balance}>{formatBaht(preset.amount_satang)}</Text>
+                  <PressableScale
+                    accessibilityRole="button"
+                    accessibilityLabel={`ลบ ${preset.label}`}
+                    onPress={() => removePreset(preset.id)}
+                    style={styles.presetDelete}
+                  >
+                    <Ionicons name="close" size={16} color={palette.muted} />
+                  </PressableScale>
+                </View>
+              ))
+            )}
+            <Text style={styles.link} accessibilityRole="button" onPress={clearRemembered}>
+              ล้างบัญชี/หมวดที่จำไว้
+            </Text>
           </Card>
         </Group>
 
@@ -394,6 +459,20 @@ const useStyles = makeStyles((palette) => ({
     alignItems: 'center' as const,
     gap: spacing.md,
     paddingVertical: spacing.xs,
+  },
+  presetRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  presetDelete: {
+    width: 28,
+    height: 28,
+    borderRadius: radius.pill,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: palette.surfaceMuted,
   },
   accountBadge: {
     width: 34,

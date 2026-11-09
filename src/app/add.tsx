@@ -1,8 +1,11 @@
+import { randomUUID } from 'expo-crypto';
 import { Stack, router, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Text, View } from 'react-native';
 import { categoriesFor } from '../categories';
+import { QuickPresets } from '../components/add/QuickPresets';
+import { SavePresetDialog } from '../components/add/SavePresetDialog';
 import { AmountInput } from '../components/common/AmountInput';
 import { Button } from '../components/common/Button';
 import { Chip } from '../components/common/Chip';
@@ -13,10 +16,17 @@ import { TextField } from '../components/common/TextField';
 import { useToast } from '../components/common/Toast';
 import { makeStyles, useTheme } from '../providers/ThemeProvider';
 import { getTransactionById } from '../services/db/transactions';
+import {
+  readLastEntry,
+  readQuickEntry,
+  writeLastEntry,
+  writeQuickEntry,
+} from '../services/storage/settings';
 import { useAppStore } from '../store/useAppStore';
 import { spacing } from '../theme';
 import type { Transaction } from '../types';
-import { formatSatang, parseAmountToSatang } from '../utils/money';
+import { formatBaht, formatSatang, parseAmountToSatang } from '../utils/money';
+import { MAX_PRESETS, type QuickPreset } from '../utils/preset';
 
 type EntryType = 'EXPENSE' | 'INCOME';
 
@@ -37,14 +47,26 @@ export default function AddTransactionScreen() {
   const addTransaction = useAppStore((s) => s.addTransaction);
   const updateTransaction = useAppStore((s) => s.updateTransaction);
 
-  const [type, setType] = useState<EntryType>('EXPENSE');
+  // A4: open on the account and category used last, so the common case is two taps.
+  const [lastUsed] = useState(() => readLastEntry());
+
+  const [type, setType] = useState<EntryType>(lastUsed?.type ?? 'EXPENSE');
   const [amountText, setAmountText] = useState('');
   const [note, setNote] = useState('');
-  const [category, setCategory] = useState<string | null>(null);
+  const [category, setCategory] = useState<string | null>(() =>
+    lastUsed?.category && categoriesFor(lastUsed.type).includes(lastUsed.category)
+      ? lastUsed.category
+      : null
+  );
   const [accountId, setAccountId] = useState<string | null>(
-    params.accountId ?? accounts[0]?.id ?? null
+    params.accountId ??
+      accounts.find((account) => account.id === lastUsed?.account_id)?.id ??
+      accounts[0]?.id ??
+      null
   );
   const [dateIso, setDateIso] = useState(() => new Date().toISOString());
+  const [presets, setPresets] = useState<QuickPreset[]>(() => readQuickEntry());
+  const [namingPreset, setNamingPreset] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(Boolean(editingId));
   // The full row, so the fields this form cannot edit survive a save untouched.
@@ -124,6 +146,7 @@ export default function AddTransactionScreen() {
           category: category ?? undefined,
           transaction_date: dateIso,
         });
+        writeLastEntry({ type, account_id: accountId, category });
         showToast('บันทึกสำเร็จ');
       }
       router.back();
@@ -131,6 +154,37 @@ export default function AddTransactionScreen() {
       showToast(error instanceof Error ? error.message : 'บันทึกไม่สำเร็จ', 'error');
       setSaving(false);
     }
+  }
+
+  /** A preset only fills the form; the user still presses save, so a mistap records nothing. */
+  function applyPreset(preset: QuickPreset) {
+    setType(preset.type);
+    setAmountText(formatSatang(preset.amount_satang));
+    setAccountId(preset.account_id);
+    setCategory(preset.category);
+  }
+
+  function savePreset(name: string) {
+    if (presets.length >= MAX_PRESETS) {
+      setNamingPreset(false);
+      showToast(`รายการโปรดเต็ม ${MAX_PRESETS} รายการ — ลบในหน้าตั้งค่าก่อน`, 'error');
+      return;
+    }
+    const next: QuickPreset[] = [
+      ...presets,
+      {
+        id: randomUUID(),
+        label: name,
+        amount_satang: satang ?? 0,
+        account_id: accountId ?? '',
+        category,
+        type,
+      },
+    ];
+    writeQuickEntry(next);
+    setPresets(next);
+    setNamingPreset(false);
+    showToast('บันทึกเป็นรายการโปรดแล้ว');
   }
 
   if (loading) {
@@ -142,6 +196,9 @@ export default function AddTransactionScreen() {
   }
 
   const isEditing = Boolean(editing);
+  const presetSummary = `${type === 'INCOME' ? 'รายรับ' : 'รายจ่าย'} ${formatBaht(satang ?? 0)} · ${
+    accounts.find((account) => account.id === accountId)?.name ?? 'ยังไม่เลือกบัญชี'
+  }${category ? ` · ${category}` : ''}`;
 
   return (
     <FormScreen
@@ -156,6 +213,8 @@ export default function AddTransactionScreen() {
       <Stack.Screen options={{ title: isEditing ? 'แก้ไขรายการ' : 'บันทึกรายการ' }} />
 
       <Segmented options={TYPE_OPTIONS} value={type} onChange={switchType} label="ประเภทรายการ" />
+
+      <QuickPresets presets={presets} onApply={applyPreset} />
 
       <AmountInput value={amountText} onChangeText={setAmountText} autoFocus={!isEditing} />
 
@@ -199,6 +258,22 @@ export default function AddTransactionScreen() {
 
       {amountText.length > 0 && (satang === null || satang === 0) ? (
         <Text style={styles.error}>จำนวนเงินไม่ถูกต้อง</Text>
+      ) : null}
+
+      <Button
+        label="บันทึกเป็นรายการโปรด"
+        variant="secondary"
+        disabled={!accountId || satang === null || satang <= 0}
+        onPress={() => setNamingPreset(true)}
+      />
+
+      {namingPreset ? (
+        <SavePresetDialog
+          defaultName={note.trim() || category || 'รายการโปรด'}
+          summary={presetSummary}
+          onCancel={() => setNamingPreset(false)}
+          onConfirm={savePreset}
+        />
       ) : null}
     </FormScreen>
   );
