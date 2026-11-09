@@ -8,11 +8,11 @@ import { formatBaht } from '../utils/money';
 import { useDeleteTransaction } from './useDeleteTransaction';
 
 /**
- * Long-press menu for a ledger row: edit, delete, cancel. Deleting still asks for confirmation
- * until undo lands, but the menu no longer makes the row look read-only.
+ * Long-press menu for a ledger row: edit, delete, cancel. Delete is no longer confirmed — the
+ * toast that follows offers an undo, which is easier to accept than a dialog on every row.
  */
 export function useTransactionMenu(db: SQLiteDatabase) {
-  const confirmDelete = useDeleteTransaction(db);
+  const runDelete = useDeleteTransaction(db);
 
   return useCallback(
     (transaction: Transaction) => {
@@ -29,11 +29,17 @@ export function useTransactionMenu(db: SQLiteDatabase) {
                 params: { id: transaction.id },
               }),
           },
-          { text: 'ลบ', style: 'destructive', onPress: () => confirmDelete(transaction) },
+          {
+            text: 'ลบ',
+            style: 'destructive',
+            onPress: () => {
+              void runDelete(transaction);
+            },
+          },
           { text: 'ยกเลิก', style: 'cancel' },
         ]
       );
     },
-    [confirmDelete]
+    [runDelete]
   );
 }

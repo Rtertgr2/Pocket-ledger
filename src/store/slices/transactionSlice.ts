@@ -45,6 +45,8 @@ export interface TransactionSlice {
   updateTransaction: (db: SQLiteDatabase, dto: UpdateTransactionDTO) => Promise<void>;
   transferFunds: (db: SQLiteDatabase, dto: TransferFundsDTO) => Promise<void>;
   deleteTransaction: (db: SQLiteDatabase, id: string) => Promise<void>;
+  /** Puts a deleted row back under its original id, so an undo cannot create a duplicate on merge. */
+  restoreTransaction: (db: SQLiteDatabase, transaction: Transaction) => Promise<void>;
   /** Wipes every account and transaction; settings are kept. */
   clearAllData: (db: SQLiteDatabase) => Promise<void>;
   reconcileBalance: (db: SQLiteDatabase, dto: ReconcileBalanceDTO) => Promise<void>;
@@ -135,6 +137,21 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
     deleteTransaction: async (db, id) => {
       const changes = await deleteTransactionById(db, id);
       if (changes === 0) throw new Error(`transaction ${id} not found`);
+      await refresh(db);
+    },
+
+    restoreTransaction: async (db, transaction) => {
+      await insertTransaction(db, {
+        id: transaction.id,
+        account_id: transaction.account_id,
+        destination_account_id: transaction.destination_account_id,
+        type: transaction.type,
+        amount_satang: transaction.amount_satang,
+        note: transaction.note,
+        category: transaction.category,
+        is_excluded_from_average: transaction.is_excluded_from_average,
+        transaction_date: transaction.transaction_date,
+      });
       await refresh(db);
     },
 
