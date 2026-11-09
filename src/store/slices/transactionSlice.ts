@@ -2,6 +2,7 @@ import type { SQLiteDatabase } from 'expo-sqlite';
 import { randomUUID } from 'expo-crypto';
 import type { StateCreator } from 'zustand';
 import {
+  countSearchResults,
   deleteTransactionById,
   insertTransaction,
   searchTransactions,
@@ -35,7 +36,10 @@ export interface TransactionSlice {
   monthIncomeSatang: number;
   /** What the ledger is filtering by; the screen owns the controls, the store owns the query. */
   ledgerFilter: TransactionFilter;
+  /** Rows the filter matches in total, so "12 รายการ" is not just the pages loaded so far. */
+  filterCount: number;
   setLedgerFilter: (db: SQLiteDatabase, filter: TransactionFilter) => Promise<void>;
+  clearFilter: (db: SQLiteDatabase) => Promise<void>;
   addTransaction: (db: SQLiteDatabase, dto: CreateTransactionDTO) => Promise<void>;
   /** Rewrites a row in place, then re-reads balances and reports so no screen shows stale money. */
   updateTransaction: (db: SQLiteDatabase, dto: UpdateTransactionDTO) => Promise<void>;
@@ -67,9 +71,15 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
     monthExpenseSatang: 0,
     monthIncomeSatang: 0,
     ledgerFilter: {},
+    filterCount: 0,
 
     setLedgerFilter: async (db, filter) => {
       set({ ledgerFilter: filter });
+      await get().fetchTransactions(db);
+    },
+
+    clearFilter: async (db) => {
+      set({ ledgerFilter: {} });
       await get().fetchTransactions(db);
     },
 
@@ -149,9 +159,17 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
     },
 
     fetchTransactions: async (db) => {
-      // One extra row tells us whether another page exists without a COUNT query.
-      const rows = await searchTransactions(db, get().ledgerFilter, LEDGER_PAGE_SIZE + 1);
-      set({ transactions: rows.slice(0, LEDGER_PAGE_SIZE), hasMore: rows.length > LEDGER_PAGE_SIZE });
+      const filter = get().ledgerFilter;
+      // One extra row tells us whether another page exists; the count is what the header shows.
+      const [rows, filterCount] = await Promise.all([
+        searchTransactions(db, filter, LEDGER_PAGE_SIZE + 1),
+        countSearchResults(db, filter),
+      ]);
+      set({
+        transactions: rows.slice(0, LEDGER_PAGE_SIZE),
+        hasMore: rows.length > LEDGER_PAGE_SIZE,
+        filterCount,
+      });
     },
 
     loadMoreTransactions: async (db) => {

@@ -15,6 +15,11 @@ import { Chip } from '../../components/common/Chip';
 import { PressableScale } from '../../components/common/PressableScale';
 import { Screen } from '../../components/common/Screen';
 import { useToast } from '../../components/common/Toast';
+import {
+  FilterSheet,
+  type RangeFilter,
+  type TypeFilter,
+} from '../../components/transactions/FilterSheet';
 import { TransactionItem } from '../../components/transactions/TransactionItem';
 import { EXPENSE_CATEGORIES } from '../../categories';
 import { useTransactionMenu } from '../../hooks/useTransactionMenu';
@@ -22,6 +27,8 @@ import { makeStyles, useTheme } from '../../providers/ThemeProvider';
 import type { TransactionFilter } from '../../services/db/transactions';
 import { useAppStore } from '../../store/useAppStore';
 import { radius, spacing } from '../../theme';
+import { monthRange } from '../../utils/calculations';
+import { startOfLocalDay } from '../../utils/dates';
 import { groupByDay } from '../../utils/formatters';
 import { formatBaht } from '../../utils/money';
 
@@ -29,6 +36,24 @@ import { formatBaht } from '../../utils/money';
 const DAY_LIMIT = 4;
 
 const ALL_CHIP = 'all';
+
+/**
+ * The date window for a range chip, as ISO bounds on whole local days (upper bound exclusive).
+ * Built from local parts so "7 วันล่าสุด" means the seven days the user just lived through.
+ */
+function rangeBounds(range: RangeFilter): { from: string; to: string } | null {
+  if (range === 'ALL') return null;
+  const today = startOfLocalDay(new Date());
+  if (range === 'MONTH') {
+    const { startIso, endIso } = monthRange(today.getFullYear(), today.getMonth());
+    return { from: startIso, to: endIso };
+  }
+  const days = range === '7' ? 7 : 30;
+  return {
+    from: new Date(today.getFullYear(), today.getMonth(), today.getDate() - (days - 1)).toISOString(),
+    to: new Date(today.getFullYear(), today.getMonth(), today.getDate() + 1).toISOString(),
+  };
+}
 
 export default function TransactionsScreen() {
   const db = useSQLiteContext();
@@ -39,6 +64,9 @@ export default function TransactionsScreen() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [queryText, setQueryText] = useState('');
   const [chipKey, setChipKey] = useState(ALL_CHIP);
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
+  const [rangeFilter, setRangeFilter] = useState<RangeFilter>('ALL');
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const accounts = useAppStore((s) => s.accounts);
@@ -47,6 +75,7 @@ export default function TransactionsScreen() {
   const refreshAll = useAppStore((s) => s.refreshAll);
   const loadMoreTransactions = useAppStore((s) => s.loadMoreTransactions);
   const setLedgerFilter = useAppStore((s) => s.setLedgerFilter);
+  const filterCount = useAppStore((s) => s.filterCount);
   const openMenu = useTransactionMenu(db);
 
   const reload = useCallback(async () => {
@@ -76,12 +105,23 @@ export default function TransactionsScreen() {
 
   /** Filters live in SQL: the ledger only holds the pages fetched so far. */
   const applyFilter = useCallback(
-    async (nextChip: string, nextQuery: string) => {
+    async (
+      nextChip: string,
+      nextQuery: string,
+      nextType: TypeFilter = 'ALL',
+      nextRange: RangeFilter = 'ALL'
+    ) => {
       const filter: TransactionFilter = {};
       if (nextChip.startsWith('acct:')) filter.accountId = nextChip.slice('acct:'.length);
       else if (nextChip.startsWith('cat:')) filter.category = nextChip.slice('cat:'.length);
       const query = nextQuery.trim();
       if (query) filter.query = query;
+      if (nextType !== 'ALL') filter.type = nextType;
+      const bounds = rangeBounds(nextRange);
+      if (bounds) {
+        filter.from = bounds.from;
+        filter.to = bounds.to;
+      }
       try {
         await setLedgerFilter(db, filter);
       } catch (error) {
@@ -91,17 +131,19 @@ export default function TransactionsScreen() {
     [db, setLedgerFilter, showToast]
   );
 
-  // One debounced query for both controls: typing and chip taps take the same path.
+  // One debounced query for every control: typing and chip taps take the same path.
   useEffect(() => {
     const timer = setTimeout(() => {
-      applyFilter(chipKey, queryText);
-    }, 300);
+      applyFilter(chipKey, queryText, typeFilter, rangeFilter);
+    }, 250);
     return () => clearTimeout(timer);
-  }, [applyFilter, chipKey, queryText]);
+  }, [applyFilter, chipKey, queryText, typeFilter, rangeFilter]);
 
   function clearFilters() {
     setQueryText('');
     setChipKey(ALL_CHIP);
+    setTypeFilter('ALL');
+    setRangeFilter('ALL');
   }
 
   const chips = useMemo(
@@ -113,7 +155,11 @@ export default function TransactionsScreen() {
     [activeAccounts]
   );
 
-  const filterActive = chipKey !== ALL_CHIP || queryText.trim().length > 0;
+  const filterActive =
+    chipKey !== ALL_CHIP ||
+    queryText.trim().length > 0 ||
+    typeFilter !== 'ALL' ||
+    rangeFilter !== 'ALL';
   const nameOf = useCallback(
     (id: string) => accounts.find((account) => account.id === id)?.name ?? 'ไม่พบบัญชี',
     [accounts]
@@ -163,8 +209,8 @@ export default function TransactionsScreen() {
       <View style={styles.header}>
         <Text style={styles.title}>รายการ</Text>
         <Text style={styles.subtitle}>
-          {transactions.length}
-          {hasMore ? '+' : ''} รายการ · {activeAccounts.length} บัญชี
+          {filterActive ? filterCount : transactions.length}
+          {filterActive ? '' : hasMore ? '+' : ''} รายการ · {activeAccounts.length} บัญชี
           {filterActive ? ' · กำลังกรอง' : ''}
         </Text>
       </View>
@@ -195,6 +241,18 @@ export default function TransactionsScreen() {
             </PressableScale>
           ) : null}
         </View>
+        <PressableScale
+          accessibilityRole="button"
+          accessibilityLabel="กรองรายการ"
+          onPress={() => setSheetOpen(true)}
+          style={[styles.filterButton, filterActive ? styles.filterButtonActive : null]}
+        >
+          <Ionicons
+            name="options-outline"
+            size={18}
+            color={filterActive ? palette.onPrimary : palette.text}
+          />
+        </PressableScale>
       </View>
 
       <ScrollView
@@ -212,6 +270,23 @@ export default function TransactionsScreen() {
           />
         ))}
       </ScrollView>
+
+      {sheetOpen ? (
+        <FilterSheet
+          type={typeFilter}
+          range={rangeFilter}
+          onApply={(nextType, nextRange) => {
+            setTypeFilter(nextType);
+            setRangeFilter(nextRange);
+            setSheetOpen(false);
+          }}
+          onReset={() => {
+            clearFilters();
+            setSheetOpen(false);
+          }}
+          onClose={() => setSheetOpen(false)}
+        />
+      ) : null}
 
       <SectionList
         sections={sections}
@@ -306,8 +381,26 @@ const useStyles = makeStyles((palette) => ({
   },
   title: { fontSize: 25, fontWeight: '700' as const, letterSpacing: -0.4, color: palette.text },
   subtitle: { fontSize: 12, color: palette.muted },
-  searchRow: { paddingHorizontal: spacing.lg },
+  searchRow: {
+    flexDirection: 'row' as const,
+    alignItems: 'center' as const,
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
+  filterButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 13,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    backgroundColor: palette.surface,
+    borderWidth: 1,
+    borderColor: palette.border,
+  },
+  filterButtonActive: { backgroundColor: palette.primary, borderColor: palette.primary },
   searchBox: {
+    flex: 1,
+    minWidth: 0,
     flexDirection: 'row' as const,
     alignItems: 'center' as const,
     gap: 9,
