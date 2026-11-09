@@ -32,6 +32,11 @@ export function TransactionItem({
   const styles = useStyles();
   const { palette } = useTheme();
   const accentKey = ACCENT_KEY[transaction.type];
+  // Both timestamps are ISO instants written by the same clock, so a string compare is enough.
+  const isEdited =
+    transaction.updated_at != null &&
+    transaction.created_at != null &&
+    transaction.updated_at > transaction.created_at;
   const accent = palette[accentKey];
   // Income and expense have solid soft tints; transfers keep the generic alpha tint.
   const chipBackground =
@@ -65,6 +70,12 @@ export function TransactionItem({
         </Text>
       </View>
       <View style={styles.amounts}>
+        {/* An edited row is worth flagging: the amount may not be what the user first wrote. */}
+        {isEdited ? (
+          <View style={styles.edited}>
+            <Text style={styles.editedText}>แก้ไขแล้ว</Text>
+          </View>
+        ) : null}
         <Text style={[styles.amount, { color: accent }]} numberOfLines={1}>
           {TYPE_SIGN[transaction.type]}
           {formatBaht(transaction.amount_satang)}
@@ -104,4 +115,11 @@ const useStyles = makeStyles((palette) => ({
   amounts: { alignItems: 'flex-end' as const, gap: 2 },
   amount: { fontSize: 15, fontWeight: '700' as const, fontVariant: ['tabular-nums'] as const },
   flag: { fontSize: 10, color: palette.muted },
+  edited: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: radius.pill,
+    backgroundColor: palette.surfaceMuted,
+  },
+  editedText: { fontSize: 9, fontWeight: '600' as const, color: palette.muted },
 }));

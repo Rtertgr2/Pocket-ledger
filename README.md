@@ -149,7 +149,8 @@ optional push into a spreadsheet you deploy yourself.
 - **Edit any row** — tap a row to open the edit form (transfers included); long-press for edit/delete
 - **Back-dated entries** — today / yesterday chips plus the system date picker, with future days disabled
 - **Quick Vault** — saved entries ("coffee ฿55") that fill the form in one tap, plus the last-used account and category
-- **Search and filter in SQL** — note, category and account name searches plus type/date/account filters, run against the whole table rather than the loaded page
+- **Search and filter in SQL** — note, category and account name searches plus type/date/account filters, run against the whole table rather than the loaded page; an "edited only" filter lists the rows you have since corrected
+- **Edited marks** — a row whose amount, account or note changed after it was first saved carries a small "แก้ไขแล้ว" badge, so a corrected entry is never mistaken for the original
 - **Undoable delete** — deletes happen immediately with a five-second "undo" toast that re-inserts the row under its original id
 - **Save and continue** — record a run of small payments without leaving the form
 - **Derived balances** — balances are never stored: a SQL view adds the opening balance and every

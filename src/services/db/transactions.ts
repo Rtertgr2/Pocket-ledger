@@ -112,6 +112,8 @@ export interface TransactionFilter {
   accountId?: string;
   from?: string;
   to?: string;
+  /** Only rows that changed after they were first saved — the "I corrected something" list. */
+  edited?: boolean;
 }
 
 /**
@@ -142,6 +144,10 @@ function buildWhere(filter: TransactionFilter): { where: string; params: string[
   if (filter.to) {
     clauses.push('t.transaction_date < ?');
     params.push(filter.to);
+  }
+  if (filter.edited) {
+    // Both sides are ISO instants written by the same clock, so a plain string compare is safe.
+    clauses.push('(t.updated_at IS NOT NULL AND t.updated_at > t.created_at)');
   }
   const query = filter.query?.trim();
   if (query) {

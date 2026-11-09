@@ -151,11 +151,11 @@ try {
   // or a header would not match the section it sits above.
   query(`
     INSERT INTO accounts (id, name, initial_balance_satang) VALUES ('day', 'วัน', 0), ('day2', 'อีกวัน', 0);
-    INSERT INTO transactions (id, account_id, destination_account_id, type, amount_satang, transaction_date) VALUES
-      ('d1', 'day', NULL, 'EXPENSE', 2500, '2026-10-29T03:00:00Z'),
-      ('d2', 'day', NULL, 'EXPENSE', 1500, '2026-10-29T04:00:00Z'),
-      ('d3', 'day', NULL, 'INCOME', 90000, '2026-10-29T05:00:00Z'),
-      ('d4', 'day', 'day2', 'TRANSFER', 1000, '2026-10-29T06:00:00Z');
+    INSERT INTO transactions (id, account_id, destination_account_id, type, amount_satang, transaction_date, created_at, updated_at) VALUES
+      ('d1', 'day', NULL, 'EXPENSE', 2500, '2026-10-29T03:00:00Z', '2026-10-29T03:00:00Z', '2026-10-29T03:00:00Z'),
+      ('d2', 'day', NULL, 'EXPENSE', 1500, '2026-10-29T04:00:00Z', '2026-10-29T04:00:00Z', '2026-10-29T09:15:00Z'),
+      ('d3', 'day', NULL, 'INCOME', 90000, '2026-10-29T05:00:00Z', '2026-10-29T05:00:00Z', '2026-10-29T05:00:00Z'),
+      ('d4', 'day', 'day2', 'TRANSFER', 1000, '2026-10-29T06:00:00Z', '2026-10-29T06:00:00Z', '2026-10-29T06:00:00Z');
   `);
 
   const localDay = (iso) => {
@@ -174,6 +174,17 @@ try {
   assert.equal(dayRows[0].day, localDay('2026-10-29T03:00:00Z'), 'the day key is the local date');
   assert.equal(dayRows[0].expense, 4000, 'expense totals add up; transfers are not spending');
   assert.equal(dayRows[0].income, 90000, 'income totals add up; transfers are not income');
+
+  // The "edited" filter (S1) and the "แก้ไขแล้ว" badge (S2) read the same predicate: a row whose
+  // updated_at moved past the moment it was saved. A row saved and never touched is not edited.
+  const editedRows = query(
+    `SELECT id FROM transactions WHERE updated_at IS NOT NULL AND updated_at > created_at ORDER BY id`
+  );
+  assert.deepEqual(
+    editedRows.map((row) => row.id),
+    ['d2'],
+    'only a row written after its creation counts as edited'
+  );
 
   // Migration v2 -> v3: the path an installed 1.0.x device takes on first launch after update.
   // The old database is built from today's DDL with what v3 added removed, so the test cannot drift.

@@ -17,6 +17,7 @@ import { Screen } from '../../components/common/Screen';
 import { useToast } from '../../components/common/Toast';
 import {
   FilterSheet,
+  type EditedFilter,
   type RangeFilter,
   type TypeFilter,
 } from '../../components/transactions/FilterSheet';
@@ -66,6 +67,7 @@ export default function TransactionsScreen() {
   const [chipKey, setChipKey] = useState(ALL_CHIP);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('ALL');
   const [rangeFilter, setRangeFilter] = useState<RangeFilter>('ALL');
+  const [editedFilter, setEditedFilter] = useState<EditedFilter>('ALL');
   const [sheetOpen, setSheetOpen] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
@@ -110,7 +112,8 @@ export default function TransactionsScreen() {
       nextChip: string,
       nextQuery: string,
       nextType: TypeFilter = 'ALL',
-      nextRange: RangeFilter = 'ALL'
+      nextRange: RangeFilter = 'ALL',
+      nextEdited: EditedFilter = 'ALL'
     ) => {
       const filter: TransactionFilter = {};
       if (nextChip.startsWith('acct:')) filter.accountId = nextChip.slice('acct:'.length);
@@ -118,6 +121,7 @@ export default function TransactionsScreen() {
       const query = nextQuery.trim();
       if (query) filter.query = query;
       if (nextType !== 'ALL') filter.type = nextType;
+      if (nextEdited === 'EDITED') filter.edited = true;
       const bounds = rangeBounds(nextRange);
       if (bounds) {
         filter.from = bounds.from;
@@ -135,16 +139,17 @@ export default function TransactionsScreen() {
   // One debounced query for every control: typing and chip taps take the same path.
   useEffect(() => {
     const timer = setTimeout(() => {
-      applyFilter(chipKey, queryText, typeFilter, rangeFilter);
+      applyFilter(chipKey, queryText, typeFilter, rangeFilter, editedFilter);
     }, 250);
     return () => clearTimeout(timer);
-  }, [applyFilter, chipKey, queryText, typeFilter, rangeFilter]);
+  }, [applyFilter, chipKey, queryText, typeFilter, rangeFilter, editedFilter]);
 
   function clearFilters() {
     setQueryText('');
     setChipKey(ALL_CHIP);
     setTypeFilter('ALL');
     setRangeFilter('ALL');
+    setEditedFilter('ALL');
   }
 
   const chips = useMemo(
@@ -160,7 +165,8 @@ export default function TransactionsScreen() {
     chipKey !== ALL_CHIP ||
     queryText.trim().length > 0 ||
     typeFilter !== 'ALL' ||
-    rangeFilter !== 'ALL';
+    rangeFilter !== 'ALL' ||
+    editedFilter !== 'ALL';
   const nameOf = useCallback(
     (id: string) => accounts.find((account) => account.id === id)?.name ?? 'ไม่พบบัญชี',
     [accounts]
@@ -271,9 +277,11 @@ export default function TransactionsScreen() {
         <FilterSheet
           type={typeFilter}
           range={rangeFilter}
-          onApply={(nextType, nextRange) => {
+          edited={editedFilter}
+          onApply={(nextType, nextRange, nextEdited) => {
             setTypeFilter(nextType);
             setRangeFilter(nextRange);
+            setEditedFilter(nextEdited);
             setSheetOpen(false);
           }}
           onReset={() => {

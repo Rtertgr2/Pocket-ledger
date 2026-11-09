@@ -10,6 +10,7 @@ import { PressableScale } from '../common/PressableScale';
 /** Type and date are the two filters that need a sheet; account and category stay quick chips. */
 export type TypeFilter = 'ALL' | 'INCOME' | 'EXPENSE' | 'TRANSFER';
 export type RangeFilter = 'ALL' | '7' | '30' | 'MONTH';
+export type EditedFilter = 'ALL' | 'EDITED';
 
 const TYPE_OPTIONS: { key: TypeFilter; label: string }[] = [
   { key: 'ALL', label: 'ทั้งหมด' },
@@ -25,11 +26,17 @@ const RANGE_OPTIONS: { key: RangeFilter; label: string }[] = [
   { key: 'MONTH', label: 'เดือนนี้' },
 ];
 
+const EDITED_OPTIONS: { key: EditedFilter; label: string }[] = [
+  { key: 'ALL', label: 'ทั้งหมด' },
+  { key: 'EDITED', label: 'เฉพาะที่แก้ไข' },
+];
+
 interface FilterSheetProps {
   /** The applied filter, used as the starting draft. The parent mounts the sheet per opening. */
   type: TypeFilter;
   range: RangeFilter;
-  onApply: (type: TypeFilter, range: RangeFilter) => void;
+  edited: EditedFilter;
+  onApply: (type: TypeFilter, range: RangeFilter, edited: EditedFilter) => void;
   onReset: () => void;
   onClose: () => void;
 }
@@ -38,11 +45,12 @@ interface FilterSheetProps {
  * The bottom sheet behind the funnel button. It only edits a draft; nothing is queried until
  * "ใช้ตัวกรอง" is pressed, so a half-set filter never flashes an empty ledger.
  */
-export function FilterSheet({ type, range, onApply, onReset, onClose }: FilterSheetProps) {
+export function FilterSheet({ type, range, edited, onApply, onReset, onClose }: FilterSheetProps) {
   const styles = useStyles();
   const { palette } = useTheme();
   const [draftType, setDraftType] = useState(type);
   const [draftRange, setDraftRange] = useState(range);
+  const [draftEdited, setDraftEdited] = useState(edited);
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -84,11 +92,25 @@ export function FilterSheet({ type, range, onApply, onReset, onClose }: FilterSh
             </View>
           </View>
 
+          <View style={styles.group}>
+            <Text style={styles.groupLabel}>สถานะ</Text>
+            <View style={styles.chips}>
+              {EDITED_OPTIONS.map((option) => (
+                <Chip
+                  key={option.key}
+                  label={option.label}
+                  selected={option.key === draftEdited}
+                  onPress={() => setDraftEdited(option.key)}
+                />
+              ))}
+            </View>
+          </View>
+
           <View style={styles.actions}>
             <Button label="ล้างตัวกรอง" variant="secondary" onPress={onReset} style={styles.action} />
             <Button
               label="ใช้ตัวกรอง"
-              onPress={() => onApply(draftType, draftRange)}
+              onPress={() => onApply(draftType, draftRange, draftEdited)}
               style={styles.action}
             />
           </View>
