@@ -17,6 +17,12 @@
 ### ความสามารถ
 
 - **บันทึกรายการ** — รายรับ / รายจ่าย / โอนระหว่างบัญชี พร้อมหมวดหมู่คงที่ 7 หมวด
+- **แก้ไขรายการ** — แตะแถวเพื่อเปิดหน้าแก้ไข (รวมถึงการโอน) กดค้างเพื่อเมนูแก้ไข/ลบ
+- **ลงวันที่ย้อนหลัง** — ชิปด่วน วันนี้ / เมื่อวาน / ปฏิทินของระบบ เลือกวันในอนาคตไม่ได้
+- **Quick Vault** — บันทึกรายการโปรด (เช่น “กาแฟ ฿55”) ไว้เติมฟอร์มในแตะเดียว และจำบัญชี/หมวดที่ใช้ล่าสุด
+- **ค้นหา/กรองใน SQL** — ค้นจากหมายเหตุ หมวด และชื่อบัญชี กรองตามประเภท/ช่วงวันที่/บัญชี ทำงานบนทั้งตาราง ไม่ใช่แค่หน้าทีโหลดแล้ว
+- **ลบแล้วเลิกทำได้** — ลบทันทีและมี Toast “เลิกทำ” 5 วินาที (คืนแถวด้วย id เดิม)
+- **บันทึกแล้วจดต่อ** — จดหลายรายการติดกันได้โดยไม่ต้องออกจากฟอร์ม
 - **ยอดคงเหลือคำนวณสด** — ไม่เคยเก็บยอดไว้ในฐานข้อมูล คำนวณจาก `initial_balance + รายการทั้งหมด`
   ผ่าน SQL view ทุกครั้ง จึงไม่มีปัญหา "ยอดค้างไม่ตรงกับรายการ"
 - **หลายบัญชี** — ตั้งสี/ไอคอนได้ ปิดใช้งานบัญชีแบบ soft delete (ประวัติไม่หาย)
@@ -36,7 +42,7 @@
 |---|---|
 | Framework | Expo SDK 58 · React Native 0.88 · React 19 |
 | Routing | Expo Router (ไฟล์ใน `src/app/` คือหน้าจอ) |
-| ฐานข้อมูล | `expo-sqlite` — schema v2, เงินเก็บเป็น `INTEGER` สตางค์ |
+| ฐานข้อมูล | `expo-sqlite` — schema v3 (`transactions.updated_at`), เงินเก็บเป็น `INTEGER` สตางค์ |
 | State | Zustand 5 (slice แยกบัญชี / รายการ) |
 | ตั้งค่า | `expo-sqlite/kv-store` (ไม่ต้องเพิ่ม native module) |
 | ภาษา | TypeScript strict |
@@ -116,10 +122,10 @@ workflow [`.github/workflows/build-apk.yml`](.github/workflows/build-apk.yml) �
 ```bash
 # build arm64 ตัวเดียว (~31MB) แล้วอัปโหลด APK + manifest
 UPLOAD_TOKEN=$(cat .secrets/upload-token.txt) \
-  node scripts/publish-feed.mjs android/app/build/outputs/apk/release/app-release.apk 1.0.1 "notes"
+  node scripts/publish-feed.mjs android/app/build/outputs/apk/release/app-release.apk 1.1.0 "notes"
 ```
 
-สัญญาของ feed และวิธีหมุน token อยู่ใน [`update-feed/README.md`](update-feed/README.md) · เบอร์ชั่นปัจจุบันบน feed: **1.0.1**
+สัญญาของ feed และวิธีหมุน token อยู่ใน [`update-feed/README.md`](update-feed/README.md) · เบอร์ชั่นล่าสุดที่ปล่อย: **1.1.0**
 
 ### เอกสารเพิ่มเติม
 
@@ -140,6 +146,12 @@ optional push into a spreadsheet you deploy yourself.
 ### Features
 
 - **Transactions** — income, expense and transfers between accounts, with seven fixed expense categories
+- **Edit any row** — tap a row to open the edit form (transfers included); long-press for edit/delete
+- **Back-dated entries** — today / yesterday chips plus the system date picker, with future days disabled
+- **Quick Vault** — saved entries ("coffee ฿55") that fill the form in one tap, plus the last-used account and category
+- **Search and filter in SQL** — note, category and account name searches plus type/date/account filters, run against the whole table rather than the loaded page
+- **Undoable delete** — deletes happen immediately with a five-second "undo" toast that re-inserts the row under its original id
+- **Save and continue** — record a run of small payments without leaving the form
 - **Derived balances** — balances are never stored: a SQL view adds the opening balance and every
   transaction that touches the account, so a balance can't drift from the ledger
 - **Multiple accounts** — colour and icon per account, deactivation is a soft delete so history survives
@@ -159,7 +171,7 @@ optional push into a spreadsheet you deploy yourself.
 |---|---|
 | Framework | Expo SDK 58 · React Native 0.88 · React 19 |
 | Routing | Expo Router (every file in `src/app/` is a screen) |
-| Database | `expo-sqlite` — schema v2, money stored as `INTEGER` satang |
+| Database | `expo-sqlite` — schema v3 (`transactions.updated_at`), money stored as `INTEGER` satang |
 | State | Zustand 5, split into account and transaction slices |
 | Settings | `expo-sqlite/kv-store` (no extra native module) |
 | Language | TypeScript, strict |
@@ -244,11 +256,11 @@ bucket on Freebuff Sites):
 ```bash
 # build a single ABI (~31MB), then upload the APK and the manifest
 UPLOAD_TOKEN=$(cat .secrets/upload-token.txt) \
-  node scripts/publish-feed.mjs android/app/build/outputs/apk/release/app-release.apk 1.0.1 "notes"
+  node scripts/publish-feed.mjs android/app/build/outputs/apk/release/app-release.apk 1.1.0 "notes"
 ```
 
 The feed contract and token rotation live in [`update-feed/README.md`](update-feed/README.md); the
-version currently advertised is **1.0.1**. Design record:
+latest released version is **1.1.0**. Design record:
 [`docs/superpowers/specs/2026-10-30-phase6-delivery-pipeline-design.md`](docs/superpowers/specs/2026-10-30-phase6-delivery-pipeline-design.md)
 
 ### More documentation

@@ -42,6 +42,10 @@ export function Chip({ label, selected = false, onPress, disabled, align = 'cent
 
 const useStyles = makeStyles((palette) => ({
   chip: {
+    // 44dp of touch area: the text is 13pt, so the padding alone would leave a chip below the
+    // minimum a thumb can hit reliably.
+    height: 44,
+    justifyContent: 'center' as const,
     paddingVertical: 9,
     paddingHorizontal: 14,
     borderRadius: radius.pill,

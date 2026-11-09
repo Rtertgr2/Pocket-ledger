@@ -188,8 +188,21 @@ export default function AddTransactionScreen() {
   function applyPreset(preset: QuickPreset) {
     setType(preset.type);
     setAmountText(formatSatang(preset.amount_satang));
-    setAccountId(preset.account_id);
+    // The account a preset points at may since have been closed: fall back to the first active
+    // one instead of leaving the form with no account selected and save disabled.
+    setAccountId(
+      accounts.some((account) => account.id === preset.account_id)
+        ? preset.account_id
+        : accounts[0]?.id ?? null
+    );
     setCategory(preset.category);
+    // Using a preset pulls it to the front: the row is ordered by what gets used, not by when it
+    // was created, so the three entries a user rotates through stay under the thumb.
+    if (presets[0]?.id !== preset.id) {
+      const reordered = [preset, ...presets.filter((item) => item.id !== preset.id)];
+      writeQuickEntry(reordered);
+      setPresets(reordered);
+    }
   }
 
   function savePreset(name: string) {
