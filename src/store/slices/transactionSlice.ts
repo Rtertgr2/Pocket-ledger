@@ -3,6 +3,7 @@ import { randomUUID } from 'expo-crypto';
 import type { StateCreator } from 'zustand';
 import {
   countSearchResults,
+  dayTotals,
   deleteTransactionById,
   insertTransaction,
   searchTransactions,
@@ -38,6 +39,11 @@ export interface TransactionSlice {
   ledgerFilter: TransactionFilter;
   /** Rows the filter matches in total, so "12 รายการ" is not just the pages loaded so far. */
   filterCount: number;
+  /**
+   * Income/expense per local day over everything the filter matches, not just the loaded pages:
+   * a day header that summed the page would understate any day longer than one page.
+   */
+  dayTotals: Record<string, { income: number; expense: number }>;
   setLedgerFilter: (db: SQLiteDatabase, filter: TransactionFilter) => Promise<void>;
   clearFilter: (db: SQLiteDatabase) => Promise<void>;
   addTransaction: (db: SQLiteDatabase, dto: CreateTransactionDTO) => Promise<void>;
@@ -74,6 +80,7 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
     monthIncomeSatang: 0,
     ledgerFilter: {},
     filterCount: 0,
+    dayTotals: {},
 
     setLedgerFilter: async (db, filter) => {
       set({ ledgerFilter: filter });
@@ -151,6 +158,10 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
         category: transaction.category,
         is_excluded_from_average: transaction.is_excluded_from_average,
         transaction_date: transaction.transaction_date,
+        // The row that comes back must be the row that left: a new `created_at` would move it in
+        // the day's order, and a new `updated_at` would make an undone delete look like an edit.
+        created_at: transaction.created_at,
+        updated_at: transaction.updated_at ?? transaction.created_at,
       });
       await refresh(db);
     },
@@ -177,15 +188,20 @@ export const createTransactionSlice: StateCreator<AppStore, [], [], TransactionS
 
     fetchTransactions: async (db) => {
       const filter = get().ledgerFilter;
-      // One extra row tells us whether another page exists; the count is what the header shows.
-      const [rows, filterCount] = await Promise.all([
+      // One extra row tells us whether another page exists; the count and the day totals are what
+      // the header and section headers show, and both cover the whole filtered set.
+      const [rows, filterCount, totals] = await Promise.all([
         searchTransactions(db, filter, LEDGER_PAGE_SIZE + 1),
         countSearchResults(db, filter),
+        dayTotals(db, filter),
       ]);
       set({
         transactions: rows.slice(0, LEDGER_PAGE_SIZE),
         hasMore: rows.length > LEDGER_PAGE_SIZE,
         filterCount,
+        dayTotals: Object.fromEntries(
+          totals.map((row) => [row.day, { income: row.income, expense: row.expense }])
+        ),
       });
     },
 

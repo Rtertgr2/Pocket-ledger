@@ -11,6 +11,9 @@ export interface InsertTransactionInput {
   category?: string | null;
   is_excluded_from_average?: number;
   transaction_date: string;
+  /** Only the undo path sets these: restoring a deleted row must keep its original timestamps. */
+  created_at?: string | null;
+  updated_at?: string | null;
 }
 
 /** Every editable column of a row, except the id and the timestamps. */
@@ -30,12 +33,13 @@ export async function insertTransaction(
   input: InsertTransactionInput
 ): Promise<void> {
   // `created_at` and `updated_at` come from the same clock inside one statement, so a new row
-  // starts with them equal and only an edit can move `updated_at`.
+  // starts with them equal and only an edit can move `updated_at`. An undo passes the deleted
+  // row's own values, so restoring it does not rewrite the row's history.
   await db.runAsync(
     `INSERT INTO transactions
        (id, account_id, destination_account_id, type, amount_satang, note, category,
-        is_excluded_from_average, transaction_date, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)`,
+        is_excluded_from_average, transaction_date, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, COALESCE(?, CURRENT_TIMESTAMP), COALESCE(?, CURRENT_TIMESTAMP))`,
     input.id,
     input.account_id,
     input.destination_account_id ?? null,
@@ -44,7 +48,9 @@ export async function insertTransaction(
     input.note ?? null,
     input.category ?? null,
     input.is_excluded_from_average ?? 0,
-    input.transaction_date
+    input.transaction_date,
+    input.created_at ?? null,
+    input.updated_at ?? null
   );
 }
 
@@ -183,6 +189,31 @@ export async function countSearchResults(
     ...params
   );
   return row?.total ?? 0;
+}
+
+/**
+ * Income and expense per local day, over everything the filter matches. The ledger screen keeps
+ * only the pages it has loaded, so a day's header must not be summed from those rows — a day with
+ * more rows than one page would quietly show a total that is too small.
+ *
+ * The day key is the local date, matching `dayKey` in the formatters, so the numbers line up with
+ * the section headers as well as with the reports.
+ */
+export function dayTotals(
+  db: SQLiteDatabase,
+  filter: TransactionFilter = {}
+): Promise<{ day: string; income: number; expense: number }[]> {
+  const { where, params } = buildWhere(filter);
+  return db.getAllAsync<{ day: string; income: number; expense: number }>(
+    `SELECT date(t.transaction_date, 'localtime') AS day,
+            COALESCE(SUM(CASE WHEN t.type = 'INCOME' THEN t.amount_satang END), 0) AS income,
+            COALESCE(SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount_satang END), 0) AS expense
+       FROM transactions t
+       JOIN accounts a ON a.id = t.account_id
+       ${where}
+      GROUP BY day`,
+    ...params
+  );
 }
 
 /** Newest first. `created_at` breaks ties so two same-second rows keep a stable order. */

@@ -146,6 +146,35 @@ try {
   assert.equal(query('SELECT COUNT(*) AS n FROM transactions')[0].n, 0, 'clearLedger empties transactions');
   assert.equal(query('SELECT COUNT(*) AS n FROM accounts')[0].n, 0, 'clearLedger empties accounts');
 
+  // The ledger's day headers come from one aggregate over the whole filtered set (`dayTotals`),
+  // not from the loaded page. The day key must be the local date — the same key `dayKey` builds —
+  // or a header would not match the section it sits above.
+  query(`
+    INSERT INTO accounts (id, name, initial_balance_satang) VALUES ('day', 'วัน', 0), ('day2', 'อีกวัน', 0);
+    INSERT INTO transactions (id, account_id, destination_account_id, type, amount_satang, transaction_date) VALUES
+      ('d1', 'day', NULL, 'EXPENSE', 2500, '2026-10-29T03:00:00Z'),
+      ('d2', 'day', NULL, 'EXPENSE', 1500, '2026-10-29T04:00:00Z'),
+      ('d3', 'day', NULL, 'INCOME', 90000, '2026-10-29T05:00:00Z'),
+      ('d4', 'day', 'day2', 'TRANSFER', 1000, '2026-10-29T06:00:00Z');
+  `);
+
+  const localDay = (iso) => {
+    const d = new Date(iso);
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  };
+  const dayRows = query(`
+    SELECT date(t.transaction_date, 'localtime') AS day,
+           COALESCE(SUM(CASE WHEN t.type = 'INCOME' THEN t.amount_satang END), 0) AS income,
+           COALESCE(SUM(CASE WHEN t.type = 'EXPENSE' THEN t.amount_satang END), 0) AS expense
+      FROM transactions t JOIN accounts a ON a.id = t.account_id
+     GROUP BY day
+  `);
+  assert.equal(dayRows.length, 1, 'one local day of rows is one section');
+  assert.equal(dayRows[0].day, localDay('2026-10-29T03:00:00Z'), 'the day key is the local date');
+  assert.equal(dayRows[0].expense, 4000, 'expense totals add up; transfers are not spending');
+  assert.equal(dayRows[0].income, 90000, 'income totals add up; transfers are not income');
+
   // Migration v2 -> v3: the path an installed 1.0.x device takes on first launch after update.
   // The old database is built from today's DDL with what v3 added removed, so the test cannot drift.
   const migrateFile = join(dir, 'migrate.db');

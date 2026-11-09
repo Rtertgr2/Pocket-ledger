@@ -76,6 +76,7 @@ export default function TransactionsScreen() {
   const loadMoreTransactions = useAppStore((s) => s.loadMoreTransactions);
   const setLedgerFilter = useAppStore((s) => s.setLedgerFilter);
   const filterCount = useAppStore((s) => s.filterCount);
+  const dayTotals = useAppStore((s) => s.dayTotals);
   const openMenu = useTransactionMenu(db);
 
   const reload = useCallback(async () => {
@@ -165,32 +166,27 @@ export default function TransactionsScreen() {
     [accounts]
   );
 
-  // Day sections keep their own totals from the full day, even when only four rows are shown.
+  // Totals come from SQL over the whole filtered set (the store's `dayTotals`); only the rows
+  // hidden behind "อีก N รายการ" are counted from what is loaded, because that row is a statement
+  // about these pages. Summing the page for a day header would understate any day past one page.
   const sections = useMemo(() => {
     return groupByDay(transactions).map((section) => {
       const rows = expanded[section.key] ? section.data : section.data.slice(0, DAY_LIMIT);
-      const totals = section.data.reduce(
-        (sum, item) => {
-          if (item.type === 'INCOME') sum.income += item.amount_satang;
-          if (item.type === 'EXPENSE') sum.expense += item.amount_satang;
-          return sum;
-        },
-        { income: 0, expense: 0 }
-      );
       const rest = section.data.slice(rows.length);
       const restExpense = rest
         .filter((item) => item.type === 'EXPENSE')
         .reduce((sum, item) => sum + item.amount_satang, 0);
+      const totals = dayTotals[section.key];
       return {
         ...section,
         data: rows,
-        income: totals.income,
-        expense: totals.expense,
+        income: totals?.income ?? 0,
+        expense: totals?.expense ?? 0,
         hiddenCount: rest.length,
         restExpense,
       };
     });
-  }, [transactions, expanded]);
+  }, [transactions, expanded, dayTotals]);
 
   async function onEndReached() {
     if (!hasMore || loadingMore) return;
